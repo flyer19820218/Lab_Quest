@@ -235,7 +235,16 @@
     posMarks.forEach((g,i)=>g.position.copy(chargePoint(i<6?'top':i<9?'left':'right',i<6?i:(i-6)%3,a,true)));
     const pivot=scope.localToWorld(V(0,.59,.07)),disc=scope.localToWorld(V(0,1.345,.07));
     negMarks.forEach((g,i)=>{const p=assignments[i];if(!p)return;const t=Math.min(1,(now-p.start)/950),end=chargePoint(p.zone,p.slot,a);g.visible=p.zone!=='earth'||(p.moving&&t<1);
-      if(p.moving&&t<1){let route=[p.from];if(p.oldZone==='earth')route.push(V(2.18,1.83,.3),...wirePoints.slice().reverse(),disc);else if(p.oldZone!=='top')route.push(pivot,disc);else route.push(disc);if(p.zone==='earth')route.push(...wirePoints,V(1.95,1.83,.3),V(2.18,1.83,.3),V(3.1,.10,.2));else if(p.zone!=='top')route.push(pivot);route.push(end);g.position.copy(pathPoint(route,t));}else g.position.lerp(end,Math.min(1,dt*14));
+      if(p.moving&&t<1){let route=[p.from];
+        if(p.oldZone==='earth')route.push(V(2.18,1.83,.3),...wirePoints.slice().reverse(),disc);
+        else if(p.oldZone!=='top')route.push(pivot,disc);
+        else if(p.zone==='top'||p.zone==='earth')route.push(disc);
+        // Induction: each new electron travels directly down from the upper
+        // conductor through the hinge to its own leaf, never up to the disc.
+        if(p.zone==='earth')route.push(...wirePoints,V(1.95,1.83,.3),V(2.18,1.83,.3),V(3.1,.10,.2));
+        else if(p.zone!=='top')route.push(pivot);
+        route.push(end);g.position.copy(pathPoint(route,t));
+      }else g.position.lerp(end,Math.min(1,dt*14));
     });
     setLink(switchArm,V(1.95,1.83,.3),state.isGrounded?V(2.18,1.83,.3):V(2.19,2.02,.3));
   }
@@ -310,7 +319,7 @@
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
       gait:legs.map((l,i)=>({hip:l.hip.rotation.x,knee:l.knee.rotation.x,handZ:arms[i].hand.getWorldPosition(V()).applyMatrix4(avatar.matrixWorld.clone().invert()).z})),
       stemBottom:2.40,baseTop:1.95,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries,
-      chargeFlows:assignments.filter(p=>p.moving&&performance.now()-p.start<950).map(p=>({from:p.oldZone,to:p.zone,slot:p.slot})),
+      chargeFlows:assignments.flatMap((p,i)=>p.moving&&performance.now()-p.start<950?[{index:i,from:p.oldZone,to:p.zone,slot:p.slot,position:negMarks[i].position.toArray()}]:[]),
       electronMarks:negMarks.map((g,i)=>({zone:assignments[i]?.zone,position:g.position.toArray(),visible:g.visible})),
       positiveMarks:posMarks.map(g=>g.position.toArray())};
     },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
