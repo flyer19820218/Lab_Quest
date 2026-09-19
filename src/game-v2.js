@@ -21,7 +21,7 @@
   Object.assign(sun.shadow.camera,{left:-10,right:10,top:10,bottom:-10,near:.5,far:30});sun.shadow.bias=-.0004;scene.add(sun);
   const fill=new T.DirectionalLight('#bfddff',1.1);fill.position.set(5,5,-4);scene.add(fill);
   const mat=(color,roughness=.65,metalness=0)=>new T.MeshStandardMaterial({color,roughness,metalness});
-  const M={wood:mat('#ba8753'),edge:mat('#e3bc81'),teal:mat('#3f736e'),dark:mat('#284b50'),cream:mat('#ede3c7'),blue:mat('#285da0'),trim:mat('#f2bd56'),skin:mat('#eab18a'),hair:mat('#362c2b'),shoe:mat('#eceddc'),pants:mat('#263c56'),metal:mat('#acbec1',.27,.65),red:mat('#d94e4e',.3,.25),gold:mat('#efc259',.35,.65),rubber:mat('#303e45'),electron:new T.MeshStandardMaterial({color:'#4dd2ff',emissive:'#19719b',emissiveIntensity:.8}),positive:new T.MeshStandardMaterial({color:'#ff8040',emissive:'#87340a',emissiveIntensity:.25})};
+  const M={wood:mat('#ba8753'),edge:mat('#e3bc81'),teal:mat('#3f736e'),dark:mat('#284b50'),cream:mat('#ede3c7'),blue:mat('#285da0'),trim:mat('#f2bd56'),skin:mat('#eab18a'),hair:mat('#362c2b'),shoe:mat('#eceddc'),pants:mat('#263c56'),metal:mat('#acbec1',.27,.65),red:mat('#d94e4e',.3,.25),gold:mat('#efc259',.35,.65),rubber:mat('#303e45'),electron:new T.MeshStandardMaterial({color:'#4dd2ff',emissive:'#19719b',emissiveIntensity:.8}),positive:new T.MeshStandardMaterial({color:'#ff4d4d',emissive:'#8a2525',emissiveIntensity:.25})};
   function mesh(geometry,material,parent=scene){const o=new T.Mesh(geometry,material);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;}
   function box(w,h,d,material,x,y,z,parent=scene){const o=mesh(new T.BoxGeometry(w,h,d),material,parent);o.position.set(x,y,z);return o;}
   function ball(rx,ry,rz,material,x,y,z,parent=scene){const o=mesh(new T.SphereGeometry(1,24,16),material,parent);o.scale.set(rx,ry,rz);o.position.set(x,y,z);return o;}
@@ -181,8 +181,8 @@
     const mapped=new Map();assignments.forEach((a,i)=>{const k=pool.findIndex(p=>p.zone===a.zone&&p.slot===a.slot);if(k>=0)mapped.set(i,pool.splice(k,1)[0]);});
     assignments=negMarks.map((g,i)=>{const dest=mapped.get(i)||pool.shift(),old=assignments[i];return {...dest,from:g.position.clone(),oldZone:old?old.zone:dest.zone,start:performance.now(),moving:!!old&&old.zone!==dest.zone};});
   }
-  function dispatch(a){const next=E.reduce(state,a);if(next!==state){state=next;rearrange();updateUI();}}
-  const messages={ready:'先拿起負電棒，控制人物的手靠近圓盤。','induced-neutral':'金箔張開了！負棒沒有碰到圓盤，電子只在驗電器內重新分布。','induction-reversed':'棒移遠，電子重新分布，金箔閉合。','ready-to-ground':'保持負棒靠近，再讓另一隻手按下接地端。','electrons-to-earth':'接地已接通，電子沿線離開。接著先把接地的手抬起。','charge-isolated':'手已抬起，接地斷開。最後再移走負電棒。','positive-remains':'留下正電了！金箔在移棒後仍張開。','wrong-order':'先移棒時，地面把電子補回來了。再試試先斷地。','ground-without-rod':'棒還沒靠近；接地不能讓中性驗電器留下電荷。','rod-too-early':'還沒接地就移棒，驗電器的總電荷仍是零。','observe-first':'先完成操作，再回答總電荷。','not-net-charge':'金箔張開不等於總電荷改變。想想電子有沒有進出。','electrons-left':'離開的是電子，因此最後留下哪一種淨電荷？','concept-correct':'實驗與判斷都完成了！'};
+  function dispatch(a){const next=E.reduce(state,a);if(next!==state){const moved=next.topElectrons!==state.topElectrons||next.leafElectrons!==state.leafElectrons||next.electronCount!==state.electronCount;state=next;if(moved)rearrange();updateUI();}}
+  const messages={ready:'先拿起負電棒，控制人物的手靠近圓盤。','induced-neutral':'第二段：左右鋁箔再各分離 1 個藍色電子，共增加 2 個；累計 4 個。正電荷固定在金屬上。','induction-reversed':'棒移遠，藍色電子回到上方導體，金箔閉合。','ready-to-ground':'第二段完成：累計 4 個藍色電子分離到鋁箔。保持負棒靠近，再用左手接地。','electrons-to-earth':'接地已接通，藍色電子沿接地線流出；紅色正電荷仍固定在金屬上。接著抬起左手。','charge-isolated':'手已抬起，接地斷開。最後再移走負電棒。','positive-remains':'電子流走後留下淨正電，金箔在移棒後仍張開。','wrong-order':'先移棒時，地面把電子補回來了。再試試先斷地。','ground-without-rod':'棒還沒靠近；接地不能讓中性驗電器留下電荷。','rod-too-early':'還沒接地就移棒，驗電器的總電荷仍是零。','observe-first':'先完成操作，再回答總電荷。','not-net-charge':'金箔張開不等於總電荷改變。想想電子有沒有進出。','electrons-left':'離開的是電子，因此最後留下哪一種淨電荷？','concept-correct':'實驗與判斷都完成了！'};
   function saveProgress(){try{localStorage.setItem(saveKey,JSON.stringify(completed));}catch(_){$('feedback').textContent+='（此瀏覽器無法儲存，進度僅保留本次。）';}}
   function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('inventory').replaceChildren();['March：方框眼鏡、深藍外套、科學 T 恤','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
   function updateUI(){
@@ -198,11 +198,12 @@
     $('reset').disabled=!!action;$('leave').disabled=!!action;
     $('net').textContent='淨電荷 '+(state.electroscopeNetCharge>0?'+':'')+state.electroscopeNetCharge;
     $('ground-status').textContent=state.isGrounded?'接地接通':'接地斷開';
+    $('electron-status').textContent=state.inductionStage===0?'遠：額外分離 0 個電子':state.inductionStage===1?'中：第一段左右各 1 個，共 2 個電子':'近：第二段左右再各 1 個，累計 4 個電子';
     $('action-caption').textContent=action?'March 正在'+action.label+'…':held?'右手持棒：'+(targetDistance===0?'近':targetDistance===.5?'中':'遠')+'。也能拖曳負電棒切換三段；左手獨立操作接地。':'負電棒放在桌上。先拿起，再進行實驗。';
     $('question').hidden=!lab||!state.operationComplete||state.completed;
     $('question-text').textContent=state.mission===1?'負棒沒碰到圓盤，驗電器的總電荷是？':'斷地、移棒後，驗電器帶什麼電？';
     $('next').hidden=!lab||!state.completed||state.mission!==1;
-    if(lab)$('feedback').textContent=messages[state.feedback]||messages.ready;
+    if(lab)$('feedback').textContent=state.inductionStage===1&&!state.isGrounded&&state.electroscopeNetCharge===0?'第一段：藍色電子從上方導體分流，左右鋁箔各增加 1 個，共 2 個。紅色正電荷固定不動。':messages[state.feedback]||messages.ready;
     progress();
   }
   function handWorld(i){avatar.updateMatrixWorld(true);return arms[i].hand.getWorldPosition(V());}
@@ -212,7 +213,7 @@
   function putAway(finish){groundWanted=false;dispatch({type:'SET_GROUNDED',value:false});targetDistance=1;dispatch({type:'MOVE_ROD',distance:1});if(!held){finish();return;}handAction('放回負電棒',RACK,650,()=>{scene.attach(rod);rod.position.copy(RACK);rod.rotation.set(0,0,0);held=false;finish();});}
   function resetMission(mission){if(action)return;putAway(()=>{state=E.createState(mission);targetDistance=1;rearrange();updateUI();});}
   function enterBench(){mode='lab';avatar.position.copy(STATION);avatar.rotation.y=0;torso.position.set(0,0,.55);torso.rotation.set(0,0,0);pelvis.position.set(0,1.57,.15);turning=0;legs.forEach(l=>{l.hip.rotation.set(0,0,0);l.knee.rotation.x=.06;l.ankle.rotation.x=-.06;});groundWanted=false;path=[];autoBench=false;isWalking=false;handToWorld(0,FAR);handToWorld(1,IDLE);updateUI();}
-  function leaveBench(){if(action)return;putAway(()=>{mode='walk';torso.position.set(0,0,0);pelvis.position.set(0,1.57,0);groundWanted=false;state=E.createState(state.mission);rearrange();keys.clear();updateUI();$('feedback').textContent='可以繼續在房間裡走走，再回到桌邊實驗。';$('world').focus({preventScroll:true});});}
+  function leaveBench(){if(action)return;putAway(()=>{mode='walk';torso.position.set(0,0,0);pelvis.position.set(0,1.57,0);groundWanted=false;state=E.createState(state.mission);rearrange();keys.clear();updateUI();$('walk-feedback').textContent='可以繼續在房間裡走走，再回到桌邊實驗。';$('world').focus({preventScroll:true});});}
   // Collision-aware grid navigation routes around the table, never through it.
   const blocked=(x,z)=>Math.abs(x)>5.94||Math.abs(z)>5.15||(Math.abs(x)<3.13&&Math.abs(z)<1.13)||(x>3.18&&z<-3.72)||(x<-4.80&&z<-3.86);
   const gridStep=.32,gridN=39,toGrid=n=>Math.round(n/gridStep)+19,key=(x,z)=>x+','+z;
@@ -223,7 +224,7 @@
     const route=[];while(key(...found)!==key(...start)){route.unshift(V((found[0]-19)*gridStep,0,(found[1]-19)*gridStep));found=parents.get(key(...found));if(!found)break;}
     if(!blocked(goal.x,goal.z))route.push(goal.clone());return route;
   }
-  function goBench(){if(mode!=='walk')return;const arrival=V(.5,0,-1.30);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('feedback').textContent='研究員正在走到實驗桌後方，準備拿取器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}}
+  function goBench(){if(mode!=='walk')return;const arrival=V(.5,0,-1.30);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('walk-feedback').textContent='研究員正在走到實驗桌後方，準備拿取器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}}
   const destination=mesh(new T.RingGeometry(.18,.23,32),new T.MeshBasicMaterial({color:'#fff0a5',side:T.DoubleSide,transparent:true,opacity:.8}));destination.rotation.x=-Math.PI/2;destination.position.y=.07;destination.visible=false;
   function moveCharacter(dx,dz,dt){const step=2.4*dt,n=Math.hypot(dx,dz);if(!n)return;dx=dx/n*step;dz=dz/n*step;const p=avatar.position;if(!blocked(p.x+dx,p.z))p.x+=dx;if(!blocked(p.x,p.z+dz))p.z+=dz;turning=Math.atan2(dx,dz);const diff=Math.atan2(Math.sin(turning-avatar.rotation.y),Math.cos(turning-avatar.rotation.y));avatar.rotation.y+=diff*Math.min(1,dt*14);}
   // Keep charge trajectories on metal; none ever cross the rod/disc air gap.
@@ -274,7 +275,17 @@
   document.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{dispatch({type:'ANSWER',value:b.dataset.answer});if(state.completed&&!completed.includes(state.mission)){completed.push(state.mission);saveProgress();progress();$('feedback').textContent=state.mission===1?'發現完成！＋40 經驗。接著挑戰先斷地、再移棒。':'＋60 經驗！升到 Lv. 2，新的金屬球與工具箱已放到器材架。';}}));
   $('notebook-button').addEventListener('click',()=>{keys.clear();joystick.x=joystick.y=0;$('notebook').showModal();});$('close-notebook').addEventListener('click',()=>$('notebook').close());
   // Fullscreen includes controls, so operating never strands the player.
-  $('fullscreen').addEventListener('click',()=>{const p=document.fullscreenElement?document.exitFullscreen():$('game').parentElement.requestFullscreen?.();if(p&&p.catch)p.catch(()=>{$('feedback').textContent='瀏覽器未允許全螢幕；仍可直接在此頁遊玩。';});});
+  $('fullscreen').addEventListener('click',async()=>{
+    if(document.fullscreenElement){await document.exitFullscreen();return;}
+    if(document.documentElement.classList.contains('immersive-fallback')){document.documentElement.classList.remove('immersive-fallback');return;}
+    try {
+      if(!document.documentElement.requestFullscreen)throw new Error('Fullscreen API unavailable');
+      await document.documentElement.requestFullscreen();
+    } catch (_) {
+      document.documentElement.classList.add('immersive-fallback');
+      $(mode==='lab'?'feedback':'walk-feedback').textContent='已切換沉浸畫面；再次按全螢幕可退出。';
+    }
+  });
   window.addEventListener('keydown',e=>{if($('notebook').open||/INPUT|TEXTAREA/.test(e.target.tagName))return;const k=e.key.toLowerCase();if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','e','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='e'&&!e.repeat){if(mode==='walk')goBench();else if(!held)takeRod();}if(k==='escape'&&mode==='lab')leaveBench();}});
   window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   function cancelInput(){keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';groundWanted=false;if(state.isGrounded)dispatch({type:'SET_GROUNDED',value:false});}
@@ -298,7 +309,10 @@
       hand:handWorld(0).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
       gait:legs.map((l,i)=>({hip:l.hip.rotation.x,knee:l.knee.rotation.x,handZ:arms[i].hand.getWorldPosition(V()).applyMatrix4(avatar.matrixWorld.clone().invert()).z})),
-      stemBottom:2.40,baseTop:1.95,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries};
+      stemBottom:2.40,baseTop:1.95,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries,
+      chargeFlows:assignments.filter(p=>p.moving&&performance.now()-p.start<950).map(p=>({from:p.oldZone,to:p.zone,slot:p.slot})),
+      electronMarks:negMarks.map((g,i)=>({zone:assignments[i]?.zone,position:g.position.toArray(),visible:g.visible})),
+      positiveMarks:posMarks.map(g=>g.position.toArray())};
     },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
   scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);
 })();

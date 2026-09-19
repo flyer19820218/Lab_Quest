@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const E = require('../src/engine.js');
 const near = { type: 'MOVE_ROD', distance: 0 };
+const mid = { type: 'MOVE_ROD', distance: 0.5 };
 const far = { type: 'MOVE_ROD', distance: 1 };
 const ground = { type: 'SET_GROUNDED', value: true };
 const disconnect = { type: 'SET_GROUNDED', value: false };
@@ -24,6 +25,29 @@ test('negative rod induces separation without transferring a single electron', (
   assert.equal(state.earthNetCharge, 0);
   assert.ok(state.leafChargeLeft < 0 && state.leafAngle > 0);
   assert.ok(state.topCharge > 0);
+});
+test('far → mid → near separates exactly one electron per leaf at each stage', () => {
+  const farState = run(1, []);
+  const midState = run(1, [mid]);
+  const nearState = run(1, [mid, near]);
+  assert.deepEqual([farState.inductionStage, midState.inductionStage, nearState.inductionStage], [0, 1, 2]);
+  assert.deepEqual([farState.displacedElectrons, midState.displacedElectrons, nearState.displacedElectrons], [0, 2, 4]);
+  assert.deepEqual([farState.leafElectrons, midState.leafElectrons, nearState.leafElectrons], [3, 4, 5]);
+  assert.deepEqual([farState.topElectrons, midState.topElectrons, nearState.topElectrons], [6, 4, 2]);
+  assert.deepEqual([farState.leafAngle, midState.leafAngle, nearState.leafAngle], [0, 28, 56]);
+  assert.ok([farState, midState, nearState].every(s => s.electroscopeNetCharge === 0));
+  for (const distance of [1, .9, .75, .6, .5, .4, .29, .28, .1, 0]) {
+    assert.ok([0, .5, 1].includes(E.inductionStrength(distance)));
+  }
+});
+test('grounding at mid removes two electrons; grounding at near removes four', () => {
+  const midGrounded = run(2, [mid, ground]);
+  const nearGrounded = run(2, [near, ground]);
+  assert.equal(midGrounded.electronCount, 10);
+  assert.equal(midGrounded.electroscopeNetCharge, 2);
+  assert.equal(nearGrounded.electronCount, 8);
+  assert.equal(nearGrounded.electroscopeNetCharge, 4);
+  assert.equal(nearGrounded.leafAngle, 0);
 });
 test('removing the rod reverses induction and closes neutral leaves', () => {
   const state = run(1, [near, far]);

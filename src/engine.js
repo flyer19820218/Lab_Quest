@@ -10,11 +10,13 @@
   const NEUTRAL_ELECTRONS = 12;
   const MAX_GROUNDED_DEFICIT = 4;
   const NEAR_DISTANCE = 0.28;
-  const FIELD_END = 0.76;
+  const FIELD_END = 0.75;
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
   function inductionStrength(distance) {
-    return clamp((FIELD_END - distance) / (FIELD_END - NEAR_DISTANCE), 0, 1);
+    // The right-hand control has three countable positions: 0, 2, then 4
+    // displaced electrons. The hand may travel smoothly between positions.
+    return distance <= NEAR_DISTANCE ? 1 : distance <= FIELD_END ? 0.5 : 0;
   }
 
   function derive(state) {
@@ -22,12 +24,14 @@
     const electrons = NEUTRAL_ELECTRONS - state.electroscopeNetCharge;
     // Symmetric leaves carry equal charge. The top retains the remainder, so
     // even during intermediate drag positions the count is always exact.
-    const leafElectrons = Math.round(3 - state.electroscopeNetCharge / 4 + strength);
+    const leafElectrons = 3 - state.electroscopeNetCharge / 2 + 2 * strength;
     const topElectrons = electrons - 2 * leafElectrons;
     const leafCharge = 3 - leafElectrons;
     return {
       ...state,
       inductionStrength: strength,
+      inductionStage: strength * 2,
+      displacedElectrons: strength * 4,
       isRodNear: state.rodDistance <= NEAR_DISTANCE,
       electronCount: electrons,
       topElectrons,
@@ -177,7 +181,7 @@
     // This is the only electron-exchange boundary. Moving an isolated rod never
     // changes the net charge; a grounded apparatus exchanges with Earth only.
     if (next.isGrounded) {
-      next.electroscopeNetCharge = Math.round(MAX_GROUNDED_DEFICIT * inductionStrength(next.rodDistance));
+      next.electroscopeNetCharge = MAX_GROUNDED_DEFICIT * inductionStrength(next.rodDistance);
       next.earthNetCharge = -next.electroscopeNetCharge;
     }
     const transfer = next.electroscopeNetCharge - previous.electroscopeNetCharge;
@@ -214,6 +218,7 @@
     if (state.topElectrons + 2 * state.leafElectrons !== state.electronCount) errors.push('electron regions must sum exactly');
     if (state.topCharge + state.leafChargeLeft + state.leafChargeRight !== state.electroscopeNetCharge) errors.push('regional charge must sum exactly');
     if (state.leafChargeLeft !== state.leafChargeRight) errors.push('symmetric leaves must have equal charge');
+    if (![0, 1, 2].includes(state.inductionStage) || state.displacedElectrons !== 2 * state.inductionStage) errors.push('induction must occur in two paired stages');
     if (!Number.isInteger(state.electroscopeNetCharge)) errors.push('net charge must be in whole model units');
     if (state.rodCharge !== 'negative') errors.push('this room has a negative rod only');
     if (state.topElectrons < 0 || state.leafElectrons < 0) errors.push('electron counts cannot be negative');
