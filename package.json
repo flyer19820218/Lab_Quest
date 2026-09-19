@@ -5,6 +5,6 @@
   "description": "A touch-first static electricity workbench with a testable, independent science engine.",
   "scripts": {
     "test": "node --test tests/engine.test.cjs",
-    "test:browser": "node tests/browser.test.cjs"
+    "test:browser": "node tests/game.test.cjs"
   }
 }

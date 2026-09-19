@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const url = pathToFileURL(path.join(__dirname, '..', 'index.html')).href;
+const url = pathToFileURL(path.join(__dirname, '..', 'prototype-svg-v1.html')).href;
 const output = path.join(__dirname, '..', 'artifacts');
 function changedPixels(a, b) {
   const first = PNG.sync.read(a), second = PNG.sync.read(b);

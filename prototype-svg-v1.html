@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#132b40">
+  <title>靜電實驗室｜物理男孩：升學實驗室</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="src/engine.js"></script>
+  <script defer src="src/app.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="#workbench" aria-label="前往靜電工作檯">
+        <span class="brand-mark" aria-hidden="true">⚛</span>
+        <span>物理男孩<span class="brand-sub">升學實驗室</span></span>
+      </a>
+      <button class="profile-button" id="profile-button" type="button"><span class="profile-dot" aria-hidden="true"></span><span id="player-name">研究員</span><span class="edit-icon" aria-hidden="true">✎</span></button>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> 物理系研究基地 · 01</p>
+          <h1 id="page-title">不碰它，<br>也能留下電荷？</h1>
+          <p class="hero-description">把看不見的電子，變成你看得懂的實驗。<br class="desktop-only">拿起負電棒，從第一個發現開始。</p>
+          <div class="hero-tags"><span>觸控操作</span><span>可自由重試</span><span>進度存在本機</span></div>
+        </div>
+        <figure class="hero-art">
+          <img src="assets/concepts/static-electricity-lab-visual-draft-v3-student-electroscope.png" alt="戴護目鏡的原創國中生研究員，在靜電工作檯操作負電棒與驗電器。" width="1672" height="940">
+          <figcaption><span class="art-dot"></span>你的靜電實驗室<span>國中生研究員</span></figcaption>
+        </figure>
+      </section>
+
+      <nav class="mission-nav" aria-label="實驗任務">
+        <button class="mission-tab active" data-mission="1" aria-current="step" type="button"><span class="mission-number">01</span><span><strong>不碰也會動</strong><small>看見感應</small></span><span class="mission-check" aria-hidden="true"></span></button>
+        <button class="mission-tab" data-mission="2" type="button"><span class="mission-number">02</span><span><strong>留下電荷</strong><small>掌握接地順序</small></span><span class="mission-check" aria-hidden="true"></span></button>
+        <button class="mission-tab upcoming" type="button" disabled><span class="mission-number">03</span><span><strong>碰到才會分享</strong><small>下一站 · 接觸起電</small></span><span class="lock-symbol" aria-hidden="true">⌑</span></button>
+      </nav>
+
+      <section class="lab-panel" id="workbench" aria-labelledby="mission-title">
+        <div class="mission-intro">
+          <div><p class="section-kicker" id="mission-kicker">任務 01 · 感應</p><h2 id="mission-title">金箔張開，就代表帶電嗎？</h2></div>
+          <button class="quiet-button" id="reset-button" type="button"><span aria-hidden="true">↺</span> 重新放好器材</button>
+        </div>
+        <div class="researcher-line">
+          <div class="researcher-avatar"><img src="assets/concepts/static-electricity-lab-visual-draft-v3-student-electroscope.png" alt="你的研究員" width="1672" height="940"></div>
+          <p id="instruction">先把負電棒拖到圓盤左側的光圈。記得保留空隙，不要接觸。</p>
+        </div>
+        <div class="prediction" id="prediction-panel">
+          <p id="prediction-question">先預測：棒不碰到圓盤，金箔會不會張開？</p>
+          <div class="prediction-choices"><button data-prediction="open" type="button">我猜會張開</button><button data-prediction="closed" type="button">我猜會閉合</button></div>
+        </div>
+        <ol class="sequence" id="sequence" hidden>
+          <li data-step="1"><span>1</span>靠近負電棒</li><li data-step="2"><span>2</span>接地</li><li data-step="3"><span>3</span>先斷地</li><li data-step="4"><span>4</span>再移棒</li>
+        </ol>
+
+        <div class="workbench-frame">
+          <div class="scene-topline"><span class="live-label"><i></i> 即時觀察</span><span id="distance-label">負電棒：遠離</span><span id="ground-label">接地：已斷開</span></div>
+          <svg id="lab-scene" viewBox="0 0 700 510" role="group" aria-labelledby="scene-title scene-description">
+            <title id="scene-title">可操作的驗電器與負電棒</title>
+            <desc id="scene-description">紅色金屬圓盤穿過絕緣塞連接金屬桿，桿只到瓶身中段的金箔鉸點，不接到底座。藍色負號是電子，橘色正號代表固定的正電荷。</desc>
+            <defs>
+              <linearGradient id="glass" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#a4d9ec" stop-opacity=".18"/><stop offset=".25" stop-color="#99d6f3" stop-opacity=".03"/><stop offset=".8" stop-color="#99d6f3" stop-opacity=".035"/><stop offset="1" stop-color="#a4d9ec" stop-opacity=".2"/></linearGradient>
+              <linearGradient id="silver"><stop stop-color="#8998a7"/><stop offset=".4" stop-color="#f3f3e5"/><stop offset=".7" stop-color="#bbc6c5"/><stop offset="1" stop-color="#657784"/></linearGradient>
+              <linearGradient id="leaf-metal"><stop stop-color="#bc8432"/><stop offset=".42" stop-color="#ffe3a1"/><stop offset="1" stop-color="#d5a654"/></linearGradient>
+              <linearGradient id="red-disc" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ff7a70"/><stop offset=".45" stop-color="#dc4549"/><stop offset="1" stop-color="#9d303e"/></linearGradient>
+              <linearGradient id="blue-rod" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#3489d1"/><stop offset=".4" stop-color="#16529c"/><stop offset="1" stop-color="#173a72"/></linearGradient>
+              <radialGradient id="desk-light"><stop stop-color="#317691" stop-opacity=".35"/><stop offset="1" stop-color="#173342" stop-opacity="0"/></radialGradient>
+              <pattern id="desk-grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0V30" fill="none" stroke="#a9caca" stroke-opacity=".045"/></pattern>
+              <filter id="soft-glow"><feGaussianBlur stdDeviation="3"/></filter>
+              <marker id="flow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 7 3.5 0 7Z" fill="#4dd2ff"/></marker>
+            </defs>
+            <rect width="700" height="510" fill="url(#desk-grid)"/>
+            <ellipse cx="368" cy="293" rx="255" ry="217" fill="url(#desk-light)"/>
+            <path d="M28 464H672" stroke="#709499" stroke-opacity=".28"/>
+            <ellipse cx="382" cy="468" rx="153" ry="17" fill="#0b1c2c" opacity=".7"/>
+
+            <g id="target-zone" aria-hidden="true"><circle cx="286" cy="140" r="26" fill="#f5c76c" opacity=".06"/><circle cx="286" cy="140" r="26" fill="none" stroke="#edc67b" stroke-dasharray="4 6" opacity=".65"/><path d="M229 170H267" fill="none" stroke="#f0c978" stroke-opacity=".65"/><text x="226" y="194" text-anchor="middle" class="svg-hint">靠近，不接觸</text></g>
+
+            <g id="ground-wire" aria-hidden="true"><path d="M450 147H534Q570 147 570 183V328" fill="none" stroke="#718f99" stroke-width="6"/><path d="M450 147H534Q570 147 570 183V328" fill="none" stroke="#acc5ca" stroke-width="2" opacity=".55"/><path d="M570 356V407" fill="none" stroke="#8da6ab" stroke-width="6"/><circle cx="570" cy="328" r="5" fill="#f2ca76"/><circle cx="570" cy="356" r="5" fill="#f2ca76"/><path id="ground-switch-arm" d="M570 356L595 330" fill="none" stroke="#edc77e" stroke-width="6" stroke-linecap="round"/><path d="M549 407H591M555 417H585M562 427H578" stroke="#aac1c2" stroke-width="4" stroke-linecap="round"/></g>
+
+            <g id="electroscope">
+              <path d="M340 193C320 219 279 254 274 302L279 435Q380 457 481 435L486 302C481 255 438 218 420 193Z" fill="url(#glass)" stroke="#abd8e4" stroke-opacity=".65" stroke-width="2.5"/>
+              <path d="M326 219C306 250 291 276 289 309V410" fill="none" stroke="#e4f5f6" stroke-width="7" opacity=".12" stroke-linecap="round"/>
+              <path d="M449 235C468 265 472 283 473 313V411" fill="none" stroke="#e4f5f6" stroke-width="3" opacity=".12"/>
+              <ellipse cx="380" cy="447" rx="116" ry="20" fill="#192f3c" stroke="#658c97" stroke-width="2"/>
+              <path d="M264 445V458C285 480 475 480 496 458V445" fill="#152c39" stroke="#779298" stroke-width="2"/>
+              <ellipse cx="380" cy="445" rx="116" ry="18" fill="#325466" stroke="#88a6ad" stroke-width="2"/>
+              <rect id="metal-stem" x="373" y="156" width="14" height="147" rx="4" fill="url(#silver)"/>
+              <g id="leaf-left"><path d="M373 302H387V401L380 407L373 401Z" fill="url(#leaf-metal)" stroke="#fae0a2" stroke-width="1.5"/><path d="M377 308V394" stroke="#fff0c6" stroke-opacity=".65" stroke-width="2"/></g>
+              <g id="leaf-right"><path d="M373 302H387V401L380 407L373 401Z" fill="url(#leaf-metal)" stroke="#fae0a2" stroke-width="1.5"/><path d="M377 308V394" stroke="#fff0c6" stroke-opacity=".65" stroke-width="2"/></g>
+              <g id="positive-sites" aria-hidden="true"></g>
+              <g id="electrons" aria-hidden="true"></g>
+              <circle cx="380" cy="302" r="8" fill="#c4b078" stroke="#ffe7a5" stroke-width="2"/>
+              <path d="M337 155H423L416 194H344Z" fill="#544c4a" stroke="#998e83" stroke-width="2"/>
+              <path d="M344 162H351L355 187H349Z" fill="#cfbeb0" opacity=".22"/>
+              <path d="M305 142V147C313 165 447 165 455 147V142" fill="#a52f40"/>
+              <ellipse cx="380" cy="141" rx="75" ry="16" fill="url(#red-disc)" stroke="#ff9791" stroke-width="2"/>
+              <ellipse cx="360" cy="135" rx="32" ry="4" fill="#ffc2af" opacity=".45"/>
+            </g>
+            <g id="electrons-top" aria-hidden="true"></g>
+            <g id="flow-layer" aria-hidden="true"></g>
+            <g id="rod" role="slider" tabindex="0" aria-label="負電棒與驗電器的距離" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="遠離" aria-orientation="horizontal">
+              <rect x="-10" y="-15" width="199" height="61" rx="20" fill="transparent"/>
+              <rect x="0" y="0" width="174" height="29" rx="14.5" fill="url(#blue-rod)" stroke="#71bdf3" stroke-width="2"/>
+              <rect x="10" y="5" width="150" height="3" rx="1.5" fill="#92d9ff" opacity=".4"/>
+              <path d="M30 15H39M64 15H73M98 15H107M132 15H141" stroke="#65d8ff" stroke-width="3" stroke-linecap="round"/>
+              <text x="85" y="-17" text-anchor="middle" class="rod-label">負電棒</text>
+              <path d="M50 48H124M50 48 58 43M50 48 58 53M124 48 116 43M124 48 116 53" stroke="#a0beca" stroke-width="1.5" opacity=".65"/>
+            </g>
+            <g class="apparatus-labels" aria-hidden="true"><text x="586" y="378">接地</text><path d="M325 235H224" stroke="#7f9da4" stroke-dasharray="3 4"/><text x="210" y="231" text-anchor="end">金屬桿</text><text x="210" y="252" text-anchor="end" class="svg-small">只到金箔鉸點</text></g>
+          </svg>
+          <div class="scene-legend"><span><i class="electron-icon">−</i> 藍色＝電子，可移動</span><span><i class="positive-icon">+</i> 橘色＝固定正電荷</span></div>
+        </div>
+
+        <div class="control-deck">
+          <div class="rod-controls"><button id="near-button" type="button"><span aria-hidden="true">⇥</span> 靠近負電棒</button><button id="far-button" type="button"><span aria-hidden="true">⇤</span> 移開負電棒</button></div>
+          <div class="ground-controls"><button id="ground-button" type="button" disabled aria-pressed="false"><span class="ground-glyph" aria-hidden="true">⏚</span><span id="ground-button-label">本任務不需要接地</span></button><label class="tap-mode" id="tap-mode-label" hidden><input id="tap-mode" type="checkbox"> 單指操作：改用點按接地</label></div>
+        </div>
+        <div class="feedback-strip" id="feedback-strip" role="status" aria-live="polite" aria-atomic="true"><span class="feedback-marker" aria-hidden="true">✦</span><p id="feedback-text">用手拖曳，或按「靠近負電棒」。兩種方式都能完成實驗。</p></div>
+
+        <div class="readouts" aria-label="即時科學狀態">
+          <div class="readout"><span>驗電器淨電荷</span><strong id="net-charge">0 <small>電中性</small></strong><span class="readout-foot">正電荷總數 − 電子總數</span></div>
+          <div class="readout"><span>金箔狀態</span><strong id="leaf-state">閉合</strong><span class="readout-foot" id="leaf-charge">左 0 ／ 右 0</span></div>
+          <div class="readout"><span>驗電器內的電子</span><strong><b id="electron-count">12</b><small>個</small></strong><span class="readout-foot" id="transfer-state">沒有電子進出</span></div>
+        </div>
+
+        <section class="answer-card" aria-labelledby="answer-question">
+          <div class="answer-heading"><span class="answer-icon" aria-hidden="true">?</span><div><p class="section-kicker">觀察之後，留下你的解釋</p><h3 id="answer-question">現在驗電器的總電荷是？</h3></div></div>
+          <div class="answer-choices"><button data-answer="positive" type="button" disabled><span class="answer-symbol positive">+</span>正</button><button data-answer="negative" type="button" disabled><span class="answer-symbol negative">−</span>負</button><button data-answer="neutral" type="button" disabled><span class="answer-symbol neutral">0</span>零</button></div>
+          <p class="answer-hint" id="answer-hint">完成上方操作，就能選擇答案。</p>
+          <div id="reward-panel" class="reward-panel" hidden><span class="reward-medallion" aria-hidden="true">✦</span><div><strong id="reward-title"></strong><p id="reward-copy"></p></div><button id="next-mission" type="button">前往任務 02 <span aria-hidden="true">→</span></button></div>
+        </section>
+
+        <details class="observation-notebook"><summary><span>觀察筆記</span><span class="notebook-label">把現象和電荷總量一起看</span><span aria-hidden="true">＋</span></summary><div class="notebook-body"><p id="concept-note"></p><div class="conservation"><span>驗電器 <b id="ledger-scope">0</b></span><span>＋</span><span>地面 <b id="ledger-earth">0</b></span><span>＝ <b>0</b></span></div><p class="model-note">電荷數字是方便數得出來的示意單位，不是庫侖讀值。正電荷固定在導體上；只有電子重新分布或經接地線移動。玻璃瓶與絕緣塞不提供電子通路。</p></div></details>
+      </section>
+      <footer><span>每一次重試，都離看懂更近。</span><span id="progress-summary">本機紀錄 · 0 / 2 項發現</span></footer>
+    </main>
+  </div>
+
+  <dialog id="profile-dialog" aria-labelledby="profile-title"><form id="profile-form"><p class="eyebrow">你的第一間研究室</p><h2 id="profile-title">今天，你就是研究員。</h2><p>替自己的國中生角色取個暱稱，<br>把每個發現變成你的學習紀錄。</p><label for="nickname">研究員暱稱</label><input id="nickname" name="nickname" maxlength="12" autocomplete="off" placeholder="例如：小宇" required><p class="privacy-note">只存在這台裝置。不需要真名、班級或帳號。</p><button class="primary-button" type="submit">進入靜電實驗室 <span aria-hidden="true">→</span></button></form></dialog>
+  <noscript><p class="noscript">請開啟 JavaScript，才能拖曳器材與觀察電子。</p></noscript>
+</body>
+</html>
