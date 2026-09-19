@@ -6,7 +6,7 @@ const {mkdirSync,writeFileSync}=require('node:fs');
 const {chromium}=require('playwright');
 const {PNG}=require('pngjs');
 const root=process.env.LAB_GAME_ROOT||path.join(__dirname,'..');
-const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d');
+const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v2');
 const wait=(page,p)=>page.waitForFunction(p,null,{timeout:20000});
 const snap=page=>page.evaluate(()=>window.labGame.snapshot());
 const gap=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
@@ -15,25 +15,29 @@ function diff(a,b){a=PNG.sync.read(a);b=PNG.sync.read(b);let n=0;for(let i=0;i<a
  mkdirSync(out,{recursive:true});const browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});const errors=[];
  try{
   const context=await browser.newContext({viewport:{width:1365,height:1000}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  const url=pathToFileURL(path.join(root,'lab_3d_walk_preview_0919_v1.html')).href;
+  const url=pathToFileURL(path.join(root,'lab_3d_walk_preview_0919_v2.html')).href;
   await page.goto(url);await wait(page,()=>!!window.labGame);await page.waitForTimeout(900);
   assert.equal((await snap(page)).mode,'walk');await page.locator('#game').screenshot({path:path.join(out,'room.png')});
-  const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(650);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
+  const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(350);await wait(page,()=>Math.abs(window.labGame.snapshot().gait[0].hip)>.25);const walking=await snap(page);assert.ok(walking.gait.some(l=>l.knee>.15),'walking must articulate the knees');assert.ok(walking.gait[0].hip*walking.gait[1].hip<0,'legs alternate');assert.ok(walking.gait.every(l=>l.hip*(l.handZ-.06)>0),'arms swing opposite their same-side legs');await page.waitForTimeout(200);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
   // Move toward the bench front for several seconds: collision must reject crossing its bounds.
   await page.keyboard.down('w');for(let i=0;i<18;i++){await page.waitForTimeout(100);const {position:p}=await snap(page);assert.ok(!(Math.abs(p[0])<3.13&&Math.abs(p[2])<1.13),'character cannot enter table collider');}await page.keyboard.up('w');
   await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab');await page.waitForTimeout(1100);
   assert.equal((await snap(page)).held,false);assert.equal(await page.locator('#near').isDisabled(),true);
   await page.locator('#pickup').click();const a=await page.locator('#game').screenshot();await page.waitForTimeout(1000);const b=await page.locator('#game').screenshot();const pickupPixels=diff(a,b);assert.ok(pickupPixels>500,'actual pickup animation must change pixels');
   await wait(page,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
+  const farPose=await snap(page);await page.locator('#game').screenshot({path:path.join(out,'rod-far.png')});
+  await page.locator('#mid').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===.5);const midPose=await snap(page);
+  assert.ok(gap(farPose.hand,midPose.hand)>.45,'middle position must visibly differ from far');assert.ok(midPose.rodDiscGap>.1);
+  await page.locator('#game').screenshot({path:path.join(out,'rod-mid.png')});
   await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);await page.waitForTimeout(1000);
-  let s=await snap(page);assert.equal(s.state.electroscopeNetCharge,0);assert.ok(s.state.leafAngle>0);assert.ok(gap(s.hand,s.rodGrip)<1e-7,'rod grip must be attached to the hand');assert.ok(s.stemBottom>s.baseTop);
-  await page.locator('#game').screenshot({path:path.join(out,'holding-rod.png')});
+  let s=await snap(page);assert.equal(s.character,'March');assert.ok(gap(midPose.hand,s.hand)>.45);assert.ok(s.rodDiscGap>.1,'near rod still has an air gap');for(const pose of [farPose,midPose,s])for(const arm of pose.armBones){assert.ok(Math.abs(arm.upper-.81)<1e-7&&Math.abs(arm.fore-.79)<1e-7,'bones never stretch');assert.ok(arm.reachError<.001,'hands can reach all targets');}assert.equal(s.state.electroscopeNetCharge,0);assert.ok(s.state.leafAngle>0);assert.ok(gap(s.hand,s.rodGrip)<1e-7,'rod grip must be attached to the hand');assert.ok(s.stemBottom>s.baseTop);
+  const nearPose=s;await page.locator('#game').screenshot({path:path.join(out,'holding-rod.png')});
   await page.locator('[data-answer="neutral"]').click();assert.equal((await snap(page)).completed.length,1);
   await page.locator('#next').click();await wait(page,()=>window.labGame.snapshot().state.mission===2&&!window.labGame.snapshot().action);
   await page.locator('#pickup').click();await wait(page,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
   await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);
-  await page.locator('#ground').click();assert.equal((await snap(page)).state.isGrounded,false,'contact must wait for the hand');
-  await wait(page,()=>window.labGame.snapshot().state.isGrounded);s=await snap(page);assert.ok(gap(s.groundHand,s.groundContact)<.025);assert.equal(s.state.electroscopeNetCharge,4);
+  const rightHandBeforeGround=(await snap(page)).hand;await page.locator('#ground').click();assert.equal((await snap(page)).state.isGrounded,false,'contact must wait for the hand');
+  await wait(page,()=>window.labGame.snapshot().state.isGrounded);s=await snap(page);assert.ok(gap(s.groundHand,s.groundContact)<.025);assert.ok(gap(s.hand,rightHandBeforeGround)<1e-6,'left hand grounds independently without moving the right hand');assert.equal(s.state.electroscopeNetCharge,4);
   const c=await page.locator('#game').screenshot();await page.waitForTimeout(1000);const d=await page.locator('#game').screenshot();const groundPixels=diff(c,d);assert.ok(groundPixels>50);
   await page.locator('#game').screenshot({path:path.join(out,'grounding.png')});
   await page.locator('#far').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===1);assert.equal((await snap(page)).state.electroscopeNetCharge,0);
@@ -50,7 +54,14 @@ function diff(a,b){a=PNG.sync.read(a);b=PNG.sync.read(b);let n=0;for(let i=0;i<a
   await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:r.x+r.width/2,y:r.y+r.height/2}]});await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:r.x+r.width*.9,y:r.y+r.height/2}]});await phone.waitForTimeout(500);await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});assert.ok(gap(phoneStart.position,(await snap(phone)).position)>.3,'touch joystick must move avatar');
   await phone.locator('#interact').tap();await wait(phone,()=>window.labGame.snapshot().mode==='lab');await phone.locator('#pickup').tap();await wait(phone,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
   await phone.locator('#near').tap();await wait(phone,()=>window.labGame.snapshot().state.isRodNear);assert.equal((await snap(phone)).state.electroscopeNetCharge,0);
-  assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await phone.locator('#game').screenshot({path:path.join(out,'touch-landscape.png')});
-  assert.deepEqual(errors,[]);const report={passed:true,keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,handGripError:gap(s.hand,s.rodGrip),groundContactVerified:true,science:'neutral induction / wrong order neutral / correct order +4',savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
+  await phone.waitForTimeout(600);
+  for(const viewport of [{width:844,height:390},{width:667,height:375}]){
+    await phone.setViewportSize(viewport);await phone.evaluate(()=>window.scrollTo(0,0));
+    const layout=await phone.evaluate(()=>{const r=id=>document.querySelector(id).getBoundingClientRect(),canvas=r('#world'),hint=r('.mission-card');return {overflow:document.documentElement.scrollWidth>innerWidth,hintAbove:hint.bottom<=canvas.top,ratio:canvas.width/canvas.height,allVisible:['#world','#far','#mid','#near','#ground'].every(id=>{const b=r(id);return b.top>=0&&b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight;})};});
+    assert.equal(layout.overflow,false);assert.equal(layout.hintAbove,true,'instructions cannot cover the character or instrument');assert.equal(layout.allVisible,true,'scene and rod/ground controls must be visible together');assert.ok(Math.abs(layout.ratio-16/9)<.01);
+    for(const [id,distance] of [['mid',.5],['far',1],['near',0]]){await phone.locator('#'+id).tap();await wait(phone,()=>!window.labGame.snapshot().action&&window.labGame.snapshot().state.rodDistance===window.labGame.snapshot().targetDistance);assert.equal((await snap(phone)).state.rodDistance,distance);}
+    await phone.screenshot({path:path.join(out,`touch-landscape-${viewport.width}.png`)});
+  }
+  assert.deepEqual(errors,[]);const report={passed:true,character:'March articulated 3D',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.hand,s.rodGrip),groundContactVerified:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,science:'neutral induction / wrong order neutral / correct order +4',savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
