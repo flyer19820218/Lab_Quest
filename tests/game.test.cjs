@@ -6,7 +6,7 @@ const {mkdirSync,writeFileSync}=require('node:fs');
 const {chromium}=require('playwright');
 const {PNG}=require('pngjs');
 const root=process.env.LAB_GAME_ROOT||path.join(__dirname,'..');
-const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v3');
+const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v4');
 const wait=(page,p)=>page.waitForFunction(p,null,{timeout:20000});
 const snap=page=>page.evaluate(()=>window.labGame.snapshot());
 const gap=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
@@ -16,6 +16,7 @@ async function checkDownwardPair(page,stage,out){
   for(let tick=0;tick<6;tick++){
     const flows=(await snap(page)).chargeFlows.filter(f=>f.from==='top'&&(f.to==='left'||f.to==='right'));
     assert.deepEqual(flows.map(f=>f.to).sort(),['left','right'],`stage ${stage} must show two separate electron flows`);
+    assert.ok(flows.every(f=>f.origin[1]>3.18),`stage ${stage} must begin on the upper metal disc, not halfway down the stem`);
     for(const flow of flows)samples[flow.to].push(flow.position[1]);
     if(tick===3)await page.locator('#game').screenshot({path:path.join(out,`stage-${stage}-flow.png`)});
     await page.waitForTimeout(100);
@@ -28,7 +29,7 @@ async function checkDownwardPair(page,stage,out){
  mkdirSync(out,{recursive:true});const browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});const errors=[];
  try{
   const context=await browser.newContext({viewport:{width:1365,height:1000}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  const url=pathToFileURL(path.join(root,'lab_3d_walk_preview_0920_v3.html')).href;
+  const url=pathToFileURL(path.join(root,'lab_3d_walk_preview_0920_v4.html')).href;
   await page.goto(url);await wait(page,()=>!!window.labGame);await page.waitForTimeout(900);
   assert.equal((await snap(page)).mode,'walk');await page.locator('#game').screenshot({path:path.join(out,'room.png')});
   const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(350);await wait(page,()=>Math.abs(window.labGame.snapshot().gait[0].hip)>.25);const walking=await snap(page);assert.ok(walking.gait.some(l=>l.knee>.15),'walking must articulate the knees');assert.ok(walking.gait[0].hip*walking.gait[1].hip<0,'legs alternate');assert.ok(walking.gait.every(l=>l.hip*(l.handZ-.06)>0),'arms swing opposite their same-side legs');await page.waitForTimeout(200);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
@@ -108,6 +109,6 @@ async function checkDownwardPair(page,stage,out){
   await phone.setViewportSize({width:390,height:844});
   assert.equal(await phone.locator('.portrait-note').isVisible(),true);
   assert.equal((await phone.locator('.portrait-note').textContent()).trim(),'請橫向使用');
-  assert.deepEqual(errors,[]);const report={passed:true,preview:'lab_3d_walk_preview_0920_v3.html',character:'March articulated 3D',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.hand,s.rodGrip),groundContactVerified:true,groundFlowOutward:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,ipadLandscape:ipadLayout,fullscreenRoot:true,fullscreenFallback:true,portraitPrompt:true,science:'0/2/4 paired electrons; two distinct downward flows per induction stage; grounded blue flow; fixed red positives',midFlowY,nearFlowY,savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
+  assert.deepEqual(errors,[]);const report={passed:true,preview:'lab_3d_walk_preview_0920_v4.html',character:'March articulated 3D',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.hand,s.rodGrip),groundContactVerified:true,groundFlowOutward:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,ipadLandscape:ipadLayout,fullscreenRoot:true,fullscreenFallback:true,portraitPrompt:true,science:'0/2/4 paired electrons; each induction stage starts on the upper metal disc and follows disc-stem-leaf; grounded blue flow; fixed red positives',midFlowY,nearFlowY,savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
