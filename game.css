@@ -104,3 +104,74 @@
 }
 html.immersive-fallback,html.immersive-fallback body{width:100%;height:100dvh;overflow:hidden}
 html.immersive-fallback #game{position:fixed;inset:0;width:100vw;height:100dvh;border:0;border-radius:0}
+
+/* Lab Quest bench mode: the existing 3D table and electroscope stay in place. */
+#bench-hud{position:absolute;inset:0;z-index:8;pointer-events:none;color:#f6f3ea}
+#bench-hud[hidden],#bench-task-detail[hidden]{display:none!important}
+.is-lab #game .mission-card,.is-lab #game #instrument-stats,.is-lab #game .experiment-controls,.is-lab #game .scene-footer,.is-lab #game #walk-feedback{display:none!important}
+.is-lab #game .game-toolbar{z-index:12}
+.is-lab #game .game-toolbar .room-label,.is-lab #game .game-toolbar .keys,.is-lab #game #notebook-button{display:none}
+.is-lab #world{pointer-events:none}
+.bench-head{position:absolute;top:10px;left:62px;right:65px;display:flex;align-items:center;gap:8px;pointer-events:none}
+.bench-head>*{pointer-events:auto}
+.bench-head button{background:#183b37ec;border-color:#9cbeae;font-size:15px;font-weight:750;padding:7px 11px}
+#bench-task-summary{max-width:370px;background:#183b37e8;border-radius:8px;padding:8px 10px;font-size:14px;line-height:1.35}
+#bench-readout{margin-left:auto;background:#102d31ef;border:1px solid #829d91;border-radius:8px;padding:9px 11px;font-size:14px;white-space:nowrap}
+.bench-controls{position:absolute;left:8px;right:8px;bottom:8px;min-height:158px;border:1px solid #82a49c;background:#102b2aec;border-radius:13px;padding:9px;display:grid;grid-template-columns:minmax(205px,27%) minmax(0,1fr);gap:9px;pointer-events:auto}
+.bench-lever{display:flex;flex-direction:column;justify-content:center;gap:12px;padding:6px 12px;background:#1b4039;border-radius:10px}
+.bench-lever label{font-size:15px;font-weight:750;color:#f3d287;line-height:1.3}
+.bench-lever output{display:block;color:#f6f3ea;font-size:15px}
+.bench-range{display:flex;align-items:center;gap:6px;font-size:15px;font-weight:700}
+.bench-range input{flex:1;min-width:0;height:44px;accent-color:#f2bd56;touch-action:none;cursor:pointer}
+.bench-range input::-webkit-slider-thumb{width:28px;height:28px}
+.bench-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(44px,1fr));gap:5px}
+.bench-buttons button{padding:3px 5px;min-height:44px;font-size:13px;font-weight:700;line-height:1.2;white-space:normal}
+.bench-buttons button[aria-pressed=true]{background:#f2bd56;color:#20352d;border-color:#ffe1a0}
+#bench-ground[aria-pressed=true]{background:#4dd2ff;color:#11261f}
+#bench-task-detail{position:absolute;z-index:20;top:56px;bottom:170px;left:12px;right:12px;width:min(690px,calc(100% - 24px));margin:auto;padding:17px 22px;border:2px solid #f2bd56;border-radius:14px;background:#112a24f7;box-shadow:0 10px 50px #071810d9;overflow:auto;pointer-events:auto}
+#bench-task-detail h2{font-size:23px;color:#ffe066;margin:0 40px 10px 0;padding:0}
+#bench-task-detail section{padding:7px 10px;margin:6px 0;border-left:4px solid #4dd2ff;background:#ffffff0a;border-radius:5px}
+#bench-task-detail h3{font-size:17px;color:#ffe066;margin:0 0 2px}
+#bench-task-detail p{font-size:16px;line-height:1.5;margin:0}
+#bench-task-close{position:absolute;top:8px;right:8px;padding:4px 12px;min-width:44px;min-height:44px}
+@media(orientation:landscape) and (min-height:551px){
+  .bench-controls{bottom:0;left:0;right:0;min-height:0;height:clamp(158px,23vh,240px);border-radius:0;grid-template-columns:minmax(220px,26%) minmax(0,1fr)}
+  #bench-task-detail{bottom:max(170px,24vh)}
+}
+@media(orientation:landscape) and (max-height:550px){
+  .bench-head{top:6px;right:251px;left:52px;flex-wrap:wrap;gap:4px}
+  .bench-head button{font-size:11px;padding:3px 7px;min-height:44px}
+  #bench-task-summary{display:none}
+  #bench-readout{margin:0;font-size:11px;padding:4px 6px;white-space:normal}
+  .bench-controls{left:auto;right:0;top:0;bottom:0;width:244px;height:100%;border-radius:0;padding:52px 5px 5px;display:flex;flex-direction:column;gap:5px}
+  .bench-lever{padding:4px 6px;gap:0;flex:0 0 auto}
+  .bench-lever label,.bench-lever output,.bench-range{font-size:11px}
+  .bench-range input{height:44px}
+  .bench-buttons{flex:1;grid-template-rows:repeat(3,minmax(44px,1fr));gap:3px;min-height:0}
+  .bench-buttons button{font-size:10px;padding:2px;min-height:44px}
+  #bench-task-detail{left:4px;right:248px;top:7px;bottom:7px;width:auto;padding:8px}
+  #bench-task-detail h2{font-size:17px}
+  #bench-task-detail h3{font-size:14px}
+  #bench-task-detail p{font-size:13px}
+}
+
+/* The walking joystick becomes the charged-rod joystick at the bench. */
+.is-lab .bench-lever{position:relative;min-height:0}
+.is-lab .bench-lever label{max-width:calc(100% - 115px)}
+.is-lab .bench-lever small{display:block;margin-top:7px;font-size:12px;line-height:1.35;letter-spacing:0}
+.is-lab .bench-range{display:none}
+.is-lab #joystick{position:absolute;z-index:10;left:auto;right:12px;top:50%;bottom:auto;transform:translateY(-50%);transform-origin:center}
+.is-lab #game #notebook-button{display:block;margin-left:auto}
+.is-lab #game .game-toolbar{left:auto;right:12px;width:auto;z-index:22}
+.is-lab .bench-head{right:220px}
+#reward-toast{position:absolute;z-index:25;top:58px;left:50%;transform:translateX(-50%);max-width:min(520px,82vw);padding:11px 18px;border:2px solid #ffe066;border-radius:12px;background:#183b37f5;color:#ffe9a5;font-weight:800;line-height:1.4;text-align:center;box-shadow:0 7px 25px #10251aa0;pointer-events:none}
+@media(orientation:landscape) and (max-height:550px){
+  .is-lab .bench-lever{flex:0 0 124px;justify-content:center}
+  .is-lab .bench-lever label{max-width:calc(100% - 88px)}
+  .is-lab .bench-lever small{font-size:10px;margin-top:4px}
+  .is-lab #joystick{right:7px;transform:translateY(-50%) scale(.75)}
+  .is-lab #game .game-toolbar{left:auto;right:max(2px,env(safe-area-inset-right));width:240px;justify-content:flex-end}
+  .is-lab #game #notebook-button{font-size:11px;padding:4px 7px}
+  .is-lab .bench-head{right:251px}
+  #reward-toast{top:52px;left:calc((100% - 244px)/2);max-width:calc(100% - 264px);padding:6px 9px;font-size:11px}
+}

@@ -1,14 +1,15 @@
 (function () {
   'use strict';
-  const $ = id => document.getElementById(id), T = window.THREE, E = window.StaticElectricity;
-  if (!T || !E) { $('loading').textContent = '無法載入實驗室，請確認 vendor 與 src 資料夾完整。'; return; }
+  const $ = id => document.getElementById(id), T = window.THREE, E = window.StaticElectricity, B = window.PhysicalBoysBench;
+  if (!T || !E || !B) { $('loading').textContent = '無法載入實驗室，請確認 vendor 與 src 資料夾完整。'; return; }
   const V = (x=0,y=0,z=0) => new T.Vector3(x,y,z);
   const saveKey = 'lab-quest-3d-v1';
   let completed=[];
   try { const v=JSON.parse(localStorage.getItem(saveKey)); if(Array.isArray(v)) completed=[...new Set(v.filter(n=>n===1||n===2))]; } catch (_) {}
-  let state=E.createState(1), mode='walk', held=false, action=null, targetDistance=1, groundWanted=false, turning=0;
+  let state=E.createState(1), bench=B.createState(), benchTaskIndex=0, mode='walk', held=false, action=null, targetDistance=1, groundWanted=false, turning=0;
   let path=[], autoBench=false, lastTime=0, raf=0, isWalking=false;
   const keys=new Set(), joystick={x:0,y:0,pointer:null};
+  let rewardTimer=0;
   const touchGraphics=navigator.maxTouchPoints>0||matchMedia('(pointer: coarse)').matches;
   const scene=new T.Scene(); scene.background=new T.Color('#b8d2c6'); scene.fog=new T.Fog('#b8d2c6',22,45);
   const camera=new T.OrthographicCamera(-8,8,4.5,-4.5,.1,80);
@@ -72,16 +73,16 @@
   const jar=mesh(new T.LatheGeometry(profile,48),glass,scope);jar.castShadow=false;jar.renderOrder=3;
   for(const side of [-1,1])curve([V(side*.47,.16,0),V(side*.47,.65,0),V(side*.44,.9,0),V(side*.17,1.22,0)],.009,M.metal,scope);
   cyl(.037,.63,M.metal,0,.905,0,scope); // bottom .59 (hinge), never .15 (base)
-  cyl(.18,.16,M.rubber,0,1.22,0,scope);cyl(.37,.07,M.red,0,1.345,0,scope);
-  cyl(.33,.013,mat('#ed7167',.25,.2),0,1.386,0,scope);
-  const leafPivots=[new T.Group(),new T.Group()];leafPivots.forEach((p,i)=>{p.position.set(0,.59,0);scope.add(p);box(.11,.41,.009,M.gold,0,-.205,i*.009,p);});
+  const plateMaterial=mat('#acbec1',.27,.65),foilMaterial=mat('#efc259',.35,.65);
+  cyl(.18,.16,M.rubber,0,1.22,0,scope);cyl(.37,.07,plateMaterial,0,1.345,0,scope);
+  cyl(.33,.013,plateMaterial,0,1.386,0,scope);
+  const leafPivots=[new T.Group(),new T.Group()];leafPivots.forEach((p,i)=>{p.position.set(0,.59,0);scope.add(p);box(.11,.41,.009,foilMaterial,0,-.205,i*.009,p);});
   ball(.055,.045,.04,M.gold,0,.59,.025,scope);
-  const groundBase=V(-.20,1.81,-.70),padY=2.05;
+  const groundBase=V(1.70,1.81,.30),padY=2.05;
   cyl(.25,.10,M.dark,groundBase.x,1.85,groundBase.z);cyl(.16,.15,M.metal,groundBase.x,1.96,groundBase.z);
-  const pad=cyl(.22,.065,M.trim,groundBase.x,padY,groundBase.z);const padGlyph=label('⏚','#284b50',.3);padGlyph.position.set(groundBase.x,2.13,groundBase.z+.08);scene.add(padGlyph);
+  const pad=cyl(.22,.065,M.trim,groundBase.x,padY,groundBase.z);const padGlyph=label('⏚','#284b50',.3);padGlyph.position.set(1.70,2.13,.38);scene.add(padGlyph);
   const wirePoints=[V(-.14,3.155,.18),V(.08,2.92,.38),V(.30,1.94,.52),V(1.68,1.98,.3)];
   curve(wirePoints,.021,M.rubber);
-  curve([wirePoints[wirePoints.length-1],V(1.40,1.84,-.82),V(.10,1.84,-.84),V(groundBase.x,1.98,groundBase.z)],.021,M.rubber);
   const switchArm=link(V(1.95,1.83,.3),V(2.19,2.02,.3),.023,M.trim);
   curve([V(2.18,1.83,.3),V(2.72,1.81,.3),V(2.95,.8,.22),V(3.1,.10,.2)],.024,M.rubber);
   // March: independent 3D meshes, modelled from the reference sheets (never flat sprites).
@@ -218,7 +219,12 @@
   const rod=new T.Group(),rodGrip=new T.Object3D();rod.add(rodGrip);scene.add(rod);
   const shaft=cyl(.058,.72,C.frame,.19,0,0,rod);shaft.rotation.z=Math.PI/2;
   const handle=cyl(.069,.22,M.rubber,-.07,0,0,rod);handle.rotation.z=Math.PI/2;
-  for(const x of [.24,.36,.48])box(.055,.012,.012,M.electron,x,0,.058,rod);
+  const rodChargeMaterial=new T.MeshBasicMaterial({color:'#4dd2ff',toneMapped:false}),rodPositiveBars=[];
+  for(const x of [.24,.36,.48]){
+    box(.075,.018,.013,rodChargeMaterial,x,0,.059,rod);
+    const upright=box(.018,.075,.013,rodChargeMaterial,x,0,.061,rod);
+    upright.visible=false;rodPositiveBars.push(upright);
+  }
   const RACK=V(-1.60,1.88,-.05),FAR=V(-1.05,2.35,-.70),NEAR=V(-1.60,3.15,.18),PRESS=V(groundBase.x,2.235,groundBase.z),IDLE=V(.78,1.92,-.53),STATION=V(.05,0,-1.15);
   rod.position.copy(RACK);
   for(const x of [-1.89,-1.24])box(.08,.055,.24,M.trim,x,1.835,-.05);
@@ -245,11 +251,12 @@
   function dispatch(a){const next=E.reduce(state,a);if(next!==state){const moved=next.topElectrons!==state.topElectrons||next.leafElectrons!==state.leafElectrons||next.electronCount!==state.electronCount;state=next;if(moved)rearrange();updateUI();}}
   const messages={ready:'先拿起負電棒，控制人物的手靠近圓盤。','induced-neutral':'第二段：左右鋁箔再各分離 1 個藍色電子，共增加 2 個；累計 4 個。正電荷固定在金屬上。','induction-reversed':'棒移遠，藍色電子回到上方導體，金箔閉合。','ready-to-ground':'第二段完成：累計 4 個藍色電子分離到鋁箔。保持負棒靠近，再用左手接地。','electrons-to-earth':'接地已接通，藍色電子沿接地線流出；紅色正電荷仍固定在金屬上。接著抬起左手。','charge-isolated':'手已抬起，接地斷開。最後再移走負電棒。','positive-remains':'電子流走後留下淨正電，金箔在移棒後仍張開。','wrong-order':'先移棒時，地面把電子補回來了。再試試先斷地。','ground-without-rod':'棒還沒靠近；接地不能讓中性驗電器留下電荷。','rod-too-early':'還沒接地就移棒，驗電器的總電荷仍是零。','observe-first':'先完成操作，再回答總電荷。','not-net-charge':'金箔張開不等於總電荷改變。想想電子有沒有進出。','electrons-left':'離開的是電子，因此最後留下哪一種淨電荷？','concept-correct':'實驗與判斷都完成了！'};
   function saveProgress(){try{localStorage.setItem(saveKey,JSON.stringify(completed));}catch(_){$('feedback').textContent+='（此瀏覽器無法儲存，進度僅保留本次。）';}}
-  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('inventory').replaceChildren();['研究員：藍綠髮、粉色上衣、實驗探險裝','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
+  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('notebook-button').textContent=`🎒 Lv. ${xp>=100?2:1} · ${xp}/100`;$('inventory').replaceChildren();['研究員：藍綠髮、粉色上衣、實驗探險裝','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
+  function announceReward(mission){const toast=$('reward-toast');toast.textContent=mission===1?'發現完成！＋40 經驗。再試試接地順序。':'升到 Lv. 2！＋60 經驗，金屬球與琥珀工具箱已放到器材架。';toast.hidden=false;clearTimeout(rewardTimer);rewardTimer=setTimeout(()=>{toast.hidden=true;},4500);}
   function updateUI(){
-    const lab=mode==='lab';$('lab-controls').hidden=!lab;$('walk-ui').hidden=lab;$('instrument-stats').hidden=!lab;
+    const lab=mode==='lab';$('lab-controls').hidden=true;$('bench-hud').hidden=!lab;$('walk-ui').hidden=lab;$('instrument-stats').hidden=true;
     document.querySelector('.game-shell').classList.toggle('is-lab',lab);
-    $('mode-label').textContent=lab?'實驗桌 · 人物操作':'自由走動';$('held-label').textContent=held?'手持負電棒':'雙手空著';
+    $('mode-label').textContent=lab?'實驗桌 · 直接操作':'自由走動';$('held-label').textContent=held?'手持負電棒':'雙手空著';
     $('mission-tag').textContent=lab?'實驗 '+state.mission+' / 2 · 靜電研究':'第一天 · 自由探索';
     $('mission-title').textContent=lab?(state.mission===1?'不碰它，金箔也會動？':'把電荷留下來。'):'先到實驗桌看看吧。';
     $('instruction').textContent=lab?(held?(state.mission===1?'右手選「遠、中、近」，觀察金箔的變化。':'右手靠近 → 左手接地 → 抬左手 → 移棒。'):'點負電棒或按「拿起」，研究員會伸出右手。'):'拖左下搖桿、使用方向鍵，或點地板走過去。';
@@ -265,7 +272,7 @@
     $('question-text').textContent=state.mission===1?'負棒沒碰到圓盤，驗電器的總電荷是？':'斷地、移棒後，驗電器帶什麼電？';
     $('next').hidden=!lab||!state.completed||state.mission!==1;
     if(lab)$('feedback').textContent=state.inductionStage===1&&!state.isGrounded&&state.electroscopeNetCharge===0?'第一段：藍色電子從上方導體分流，左右鋁箔各增加 1 個，共 2 個。紅色正電荷固定不動。':messages[state.feedback]||messages.ready;
-    progress();
+    progress();if(lab)updateBenchUI();
   }
   function handWorld(i){avatar.updateMatrixWorld(true);return arms[i].hand.getWorldPosition(V());}
   function handToWorld(i,p){avatar.updateMatrixWorld(true);poseArm(i,avatar.worldToLocal(p.clone()));}
@@ -273,8 +280,8 @@
   function takeRod(){if(mode!=='lab'||held||action)return;handAction('伸手拿棒',RACK,650,()=>{arms[0].hand.add(rod);rod.position.set(0,0,0);rod.rotation.set(0,0,0);held=true;handAction('拿起負電棒',FAR,550,()=>{targetDistance=1;});});}
   function putAway(finish){groundWanted=false;dispatch({type:'SET_GROUNDED',value:false});targetDistance=1;dispatch({type:'MOVE_ROD',distance:1});if(!held){finish();return;}handAction('放回負電棒',RACK,650,()=>{scene.attach(rod);rod.position.copy(RACK);rod.rotation.set(0,0,0);held=false;finish();});}
   function resetMission(mission){if(action)return;putAway(()=>{state=E.createState(mission);targetDistance=1;rearrange();updateUI();});}
-  function enterBench(){mode='lab';avatar.position.copy(STATION);avatar.rotation.y=0;torso.position.set(0,0,.55);torso.rotation.set(0,0,0);pelvis.position.set(0,1.57,.15);turning=0;legs.forEach(l=>{l.hip.rotation.set(0,0,0);l.knee.rotation.x=.06;l.ankle.rotation.x=-.06;});groundWanted=false;path=[];autoBench=false;isWalking=false;handToWorld(0,FAR);handToWorld(1,IDLE);updateUI();}
-  function leaveBench(){if(action)return;putAway(()=>{mode='walk';torso.position.set(0,0,0);pelvis.position.set(0,1.57,0);groundWanted=false;state=E.createState(state.mission);rearrange();keys.clear();updateUI();$('walk-feedback').textContent='可以繼續在房間裡走走，再回到桌邊實驗。';$('world').focus({preventScroll:true});});}
+  function enterBench(){mode='lab';avatar.visible=false;path=[];autoBench=false;isWalking=false;destination.visible=false;bench=B.createState();benchTaskIndex=0;benchFlow.length=0;benchParticles.forEach(p=>p.visible=false);benchFlowRemainder=0;benchGroundedNear=benchReleasedNear=false;joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';$('bench-lever').appendChild($('joystick'));$('joystick').setAttribute('aria-label','帶電棒搖桿。向右或向上靠近，向左或向下移遠。');scene.attach(rod);rod.rotation.set(0,0,0);syncRodPolarity();updateUI();}
+  function leaveBench(){mode='walk';avatar.visible=true;avatar.position.set(.5,0,1.55);avatar.rotation.y=0;scene.attach(rod);rod.position.copy(RACK);rod.rotation.set(0,0,0);keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';$('walk-ui').prepend($('joystick'));$('joystick').setAttribute('aria-label','觸控移動搖桿');benchFlow.length=0;benchParticles.forEach(p=>p.visible=false);syncRodPolarity();updateUI();$('walk-feedback').textContent='可以繼續在房間裡走走，再回到桌邊實驗。';$('world').focus({preventScroll:true});}
   // Collision-aware grid navigation routes around the table, never through it.
   const blocked=(x,z)=>Math.abs(x)>5.94||Math.abs(z)>5.15||(Math.abs(x)<3.13&&Math.abs(z)<1.13)||(x>3.18&&z<-3.72)||(x<-4.80&&z<-3.86);
   const gridStep=.32,gridN=39,toGrid=n=>Math.round(n/gridStep)+19,key=(x,z)=>x+','+z;
@@ -285,7 +292,7 @@
     const route=[];while(key(...found)!==key(...start)){route.unshift(V((found[0]-19)*gridStep,0,(found[1]-19)*gridStep));found=parents.get(key(...found));if(!found)break;}
     if(!blocked(goal.x,goal.z))route.push(goal.clone());return route;
   }
-  function goBench(){if(mode!=='walk')return;const arrival=V(.5,0,-1.30);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('walk-feedback').textContent='研究員正在走到實驗桌後方，準備拿取器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}}
+  function goBench(){if(mode!=='walk')return;const arrival=V(.5,0,1.55);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('walk-feedback').textContent='研究員正在走向實驗桌，準備直接操作器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}else if(!blocked(avatar.position.x,avatar.position.z))enterBench();}
   const destination=mesh(new T.RingGeometry(.18,.23,32),new T.MeshBasicMaterial({color:'#fff0a5',side:T.DoubleSide,transparent:true,opacity:.8}));destination.rotation.x=-Math.PI/2;destination.position.y=.07;destination.visible=false;
   function moveCharacter(dx,dz,dt){const step=2.4*dt,n=Math.hypot(dx,dz);if(!n)return;dx=dx/n*step;dz=dz/n*step;const p=avatar.position;if(!blocked(p.x+dx,p.z))p.x+=dx;if(!blocked(p.x,p.z+dz))p.z+=dz;turning=Math.atan2(dx,dz);const diff=Math.atan2(Math.sin(turning-avatar.rotation.y),Math.cos(turning-avatar.rotation.y));avatar.rotation.y+=diff*Math.min(1,dt*14);}
   // Keep charge trajectories on metal; none ever cross the rod/disc air gap.
@@ -310,6 +317,65 @@
     });
     setLink(switchArm,V(1.95,1.83,.3),state.isGrounded?V(2.18,1.83,.3):V(2.19,2.02,.3));
   }
+  // The original Physical-Boys tab-6 model drives the existing 3D instrument.
+  // Only moving electrons are dots; positive charge is a stationary red tint.
+  const benchFlow=[],benchParticles=Array.from({length:12},()=>{
+    const p=ball(.043,.043,.043,M.electron,0,0,0);p.castShadow=false;p.visible=false;return p;
+  });
+  let benchFlowRemainder=0,benchGroundedNear=false,benchReleasedNear=false;
+  const benchObserved=[false,false,false,false,false];
+  function spawnBenchFlow(direction,amount){
+    scene.updateMatrixWorld(true);
+    const disc=scope.localToWorld(V(0,1.345,.07)),stem=scope.localToWorld(V(0,.905,.07)),pivot=scope.localToWorld(V(0,.59,.07));
+    const ground=[disc,...wirePoints,V(1.95,1.83,.3),V(2.18,1.83,.3),V(3.1,.10,.2)];
+    const number=direction.includes('earth')?Math.min(4,Math.max(1,Math.floor(amount/20))):2;
+    for(let i=0;i<number;i++){
+      const leaf=scope.localToWorld(V(i%2?.075:-.075,.18,.09));
+      const path=direction==='plate-to-leaf'?[disc,stem,pivot,leaf]:direction==='leaf-to-plate'?[leaf,pivot,stem,disc]:direction==='leaf-to-earth'?[leaf,pivot,stem,...ground]:ground.slice().reverse();
+      const particle=benchParticles.find(p=>!p.visible);
+      if(!particle)break;
+      particle.visible=true;particle.position.copy(path[0]);benchFlow.push({particle,path,start:performance.now()+i*70,duration:Math.min(1600,700+path.slice(1).reduce((n,p,j)=>n+p.distanceTo(path[j]),0)*310)});
+    }
+  }
+  function updateBenchUI(){
+    const task=B.tasks[benchTaskIndex],q=bench.netQ;
+    $('bench-task-open').textContent=`探究任務 ${benchTaskIndex+1} / ${B.tasks.length}${benchObserved[benchTaskIndex]?' ✓':''}`;
+    $('bench-task-summary').textContent=task.think;
+    $('bench-task-title').textContent=task.title;$('bench-think').textContent=task.think;$('bench-act').textContent=task.act;$('bench-verify').textContent=task.verify;
+    $('bench-distance').value=bench.dist;
+    $('bench-distance-label').textContent=`${bench.dist===0?'遠':bench.dist===100?'近':'調整中'} · ${Math.round(bench.dist)}%`;
+    $('bench-readout').textContent=`金屬盤 ${Math.round(bench.plateQ)} · 金箔 ${Math.round(bench.leafQ)} · 淨電荷 ${q>0?'+':''}${Math.round(q)}`;
+    $('bench-rod-negative').setAttribute('aria-pressed',String(bench.rodType===-1));$('bench-rod-positive').setAttribute('aria-pressed',String(bench.rodType===1));
+    $('bench-ground').setAttribute('aria-pressed',String(bench.isGrounded));$('bench-ground').textContent=bench.isGrounded?'🔌 解除接地':'⚡ 接地';
+    $('bench-prev').disabled=benchTaskIndex===0;$('bench-next').disabled=benchTaskIndex===B.tasks.length-1;
+  }
+  function setBench(next){
+    const old=bench,priorRewards=completed.length;bench=next;syncRodPolarity();
+    if(old.isGrounded===bench.isGrounded){
+      if(!bench.isGrounded){
+        benchFlowRemainder+=bench.leafQ-old.leafQ;
+        if(Math.abs(benchFlowRemainder)>=6){spawnBenchFlow(benchFlowRemainder<0?'plate-to-leaf':'leaf-to-plate',Math.abs(benchFlowRemainder));benchFlowRemainder=0;}
+      }else if(bench.flow)spawnBenchFlow(bench.flow.direction,bench.flow.amount);
+    }else{benchFlowRemainder=0;if(bench.flow)spawnBenchFlow(bench.flow.direction,bench.flow.amount);}
+    if(bench.isGrounded&&bench.dist>=80&&bench.rodType===-1){benchGroundedNear=true;if(benchTaskIndex===1)benchObserved[1]=true;}
+    if(old.isGrounded&&!bench.isGrounded&&bench.dist>=80&&bench.rodType===-1&&benchGroundedNear)benchReleasedNear=true;
+    if(benchTaskIndex===0&&bench.rodType===-1&&bench.netQ===0&&bench.dist>=80){benchObserved[0]=true;if(!completed.includes(1)){completed.push(1);saveProgress();}}
+    if(benchReleasedNear&&!bench.isGrounded&&bench.dist<=2&&bench.netQ>0){benchObserved[2]=true;if(!completed.includes(2)){completed.push(2);saveProgress();}}
+    if(benchTaskIndex===3&&bench.netQ===-100&&bench.rodType===-1&&bench.dist>=80)benchObserved[3]=true;
+    if(benchTaskIndex===4&&bench.netQ===-100&&bench.rodType===1&&bench.dist>=90&&bench.leafQ>0)benchObserved[4]=true;
+    updateBenchUI();if(completed.length!==priorRewards){progress();announceReward(completed.at(-1));}
+  }
+  function syncRodPolarity(){const positive=mode==='lab'&&bench.rodType===1;rodChargeMaterial.color.set(positive?'#ff4d4d':'#4dd2ff');rodPositiveBars.forEach(bar=>bar.visible=positive);}
+  function animateBench(now,dt){
+    const target=B.leafAngle(bench),alpha=1-Math.exp(-dt*7);
+    leafPivots[0].rotation.z+=(target-leafPivots[0].rotation.z)*alpha;leafPivots[1].rotation.z=-leafPivots[0].rotation.z;
+    plateMaterial.color.set(Math.abs(bench.plateQ)<1?'#acbec1':B.chargeColor(bench.plateQ));
+    foilMaterial.color.set(Math.abs(bench.leafQ)<1?'#efc259':B.chargeColor(bench.leafQ));
+    syncRodPolarity();
+    setLink(switchArm,V(1.95,1.83,.3),bench.isGrounded?V(2.18,1.83,.3):V(2.19,2.02,.3));
+    if(mode==='lab'){rod.position.set(-2.75+1.20*bench.dist/100,3.155,.18);rod.rotation.set(0,0,0);}
+    for(let i=benchFlow.length-1;i>=0;i--){const f=benchFlow[i],t=Math.max(0,(now-f.start)/f.duration);if(t>=1){f.particle.visible=false;benchFlow.splice(i,1);}else f.particle.position.copy(pathPoint(f.path,t));}
+  }
   const camWalk=V(9,9.5,12),camLab=V(3.2,4.8,8.4),look=new T.Vector3(),camAim=V(0,1,0);let camWidth=16;
   function resize(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;renderer.setSize(b.width,b.height,false);updateCamera();}
   function updateCamera(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;const ratio=b.width/b.height;camera.left=-camWidth/2;camera.right=camWidth/2;camera.top=camWidth/ratio/2;camera.bottom=-camera.top;camera.updateProjectionMatrix();}
@@ -329,22 +395,29 @@
       torso.position.y=bob;torso.rotation.z=isWalking?swing*.035:Math.sin(now*.0018)*.008;pelvis.position.y=1.57+bob;head.rotation.x*=1-Math.min(1,dt*4);head.rotation.y*=1-Math.min(1,dt*4);
       poseArm(0,rest[0].clone().add(V(0,bob,-swing*.9)));poseArm(1,rest[1].clone().add(V(0,bob,swing*.9)));
       if(!autoBench)$('interact').querySelector('span').textContent=Math.hypot(avatar.position.x,avatar.position.z)<4?'操作實驗桌':'走到實驗桌';
-    } else {
-      if(action){const current=action,t=Math.min(1,(now-current.start)/current.duration),ease=t*t*(3-2*t),p=current.from.clone().lerp(current.to,ease);p.y+=Math.sin(t*Math.PI)*.13;handToWorld(0,p);if(t===1){action=null;current.finish();updateUI();}}
-      else if(held){const d=state.rodDistance+(targetDistance-state.rodDistance)*Math.min(1,dt*6),settled=Math.abs(d-targetDistance)<.001?targetDistance:d;handToWorld(0,NEAR.clone().lerp(FAR,settled));dispatch({type:'MOVE_ROD',distance:settled});}
-      else {const p=handWorld(0).lerp(FAR,Math.min(1,dt*8));handToWorld(0,p);}
-      const p=handWorld(1),goal=groundWanted?PRESS:IDLE;p.lerp(goal,Math.min(1,dt*9));handToWorld(1,p);
-      if(groundWanted&&!state.isGrounded&&handWorld(1).distanceTo(PRESS)<.02)dispatch({type:'SET_GROUNDED',value:true});
-      head.rotation.y+=(held?-.20-head.rotation.y:-head.rotation.y)*Math.min(1,dt*4);head.rotation.x+=((held?.11:0)-head.rotation.x)*Math.min(1,dt*4);
+    }else{
+      const axis=Math.abs(joystick.x)>=Math.abs(joystick.y)?joystick.x:-joystick.y;
+      if(Math.abs(axis)>.08)setBench(B.setDistance(bench,bench.dist+axis*65*dt));
     }
     const blend=1-Math.exp(-dt*5);camera.position.lerp(mode==='lab'?camLab:camWalk,blend);camAim.lerp(mode==='lab'?V(0,2.30,0):V(0,1,0),blend);camera.lookAt(camAim);camWidth+=((mode==='lab'?7.6:16)-camWidth)*blend;updateCamera();
-    updateStudent(dt);animateCharges(now,dt);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
+    if(mode==='walk')updateStudent(dt);
+    animateBench(now,dt);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
   }
   $('interact').addEventListener('click',goBench);$('pickup').addEventListener('click',takeRod);
   function chooseDistance(distance){if(held&&!action){targetDistance=distance;updateUI();}}
   $('near').addEventListener('click',()=>chooseDistance(0));$('mid').addEventListener('click',()=>chooseDistance(.5));$('far').addEventListener('click',()=>chooseDistance(1));
   function toggleGround(){if(mode!=='lab'||state.mission!==2||!held||action)return;groundWanted=!groundWanted;if(!groundWanted)dispatch({type:'SET_GROUNDED',value:false});updateUI();}
   $('ground').addEventListener('click',toggleGround);$('reset').addEventListener('click',()=>resetMission(state.mission));$('leave').addEventListener('click',leaveBench);$('next').addEventListener('click',()=>resetMission(2));
+  $('bench-distance').addEventListener('input',e=>setBench(B.setDistance(bench,Number(e.target.value))));
+  $('bench-rod-negative').addEventListener('click',()=>setBench(B.setRod(bench,-1)));
+  $('bench-rod-positive').addEventListener('click',()=>setBench(B.setRod(bench,1)));
+  $('bench-ground').addEventListener('click',()=>setBench(B.toggleGround(bench)));
+  [['bench-preset-negative',-100],['bench-preset-neutral',0],['bench-preset-positive',100]].forEach(([id,q])=>$(id).addEventListener('click',()=>setBench(B.forceSetCharge(bench,q))));
+  $('bench-prev').addEventListener('click',()=>{benchTaskIndex=Math.max(0,benchTaskIndex-1);updateBenchUI();});
+  $('bench-next').addEventListener('click',()=>{benchTaskIndex=Math.min(B.tasks.length-1,benchTaskIndex+1);updateBenchUI();});
+  $('bench-leave').addEventListener('click',leaveBench);
+  $('bench-task-open').addEventListener('click',()=>{$('bench-task-detail').hidden=false;$('bench-task-open').setAttribute('aria-expanded','true');});
+  $('bench-task-close').addEventListener('click',()=>{$('bench-task-detail').hidden=true;$('bench-task-open').setAttribute('aria-expanded','false');});
   document.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{dispatch({type:'ANSWER',value:b.dataset.answer});if(state.completed&&!completed.includes(state.mission)){completed.push(state.mission);saveProgress();progress();$('feedback').textContent=state.mission===1?'發現完成！＋40 經驗。接著挑戰先斷地、再移棒。':'＋60 經驗！升到 Lv. 2，新的金屬球與工具箱已放到器材架。';}}));
   $('notebook-button').addEventListener('click',()=>{keys.clear();joystick.x=joystick.y=0;$('notebook').showModal();});$('close-notebook').addEventListener('click',()=>$('notebook').close());
   // Fullscreen includes controls, so operating never strands the player.
@@ -359,7 +432,7 @@
       $(mode==='lab'?'feedback':'walk-feedback').textContent='已切換沉浸畫面；再次按全螢幕可退出。';
     }
   });
-  window.addEventListener('keydown',e=>{if($('notebook').open||/INPUT|TEXTAREA/.test(e.target.tagName))return;const k=e.key.toLowerCase();if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','e','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='e'&&!e.repeat){if(mode==='walk')goBench();else if(!held)takeRod();}if(k==='escape'&&mode==='lab')leaveBench();}});
+  window.addEventListener('keydown',e=>{if($('notebook').open||/INPUT|TEXTAREA/.test(e.target.tagName))return;const k=e.key.toLowerCase();if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','e','escape'].includes(k)){e.preventDefault();if(mode==='lab'){if(['arrowright','arrowup'].includes(k))setBench(B.setDistance(bench,bench.dist+2));if(['arrowleft','arrowdown'].includes(k))setBench(B.setDistance(bench,bench.dist-2));if(k==='escape'){if(!$('bench-task-detail').hidden){$('bench-task-detail').hidden=true;$('bench-task-open').setAttribute('aria-expanded','false');}else leaveBench();}return;}keys.add(k);if(k==='e'&&!e.repeat)goBench();}});
   window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   function cancelInput(){keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';groundWanted=false;if(state.isGrounded)dispatch({type:'SET_GROUNDED',value:false});}
   window.addEventListener('blur',cancelInput);document.addEventListener('visibilitychange',()=>{cancelInput();if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=0;}else if(!raf){lastTime=performance.now();raf=requestAnimationFrame(frame);}});
@@ -368,9 +441,7 @@
   $('joystick').addEventListener('pointermove',joyMove);['pointerup','pointercancel','lostpointercapture'].forEach(event=>$('joystick').addEventListener(event,e=>{if(e.pointerId===joystick.pointer){joystick.pointer=null;joystick.x=joystick.y=0;$('stick').style.transform='';}}));
   const ray=new T.Raycaster(),plane=new T.Plane(V(0,1,0),0);let dragRod=null;
   function rayAt(e){const r=$('world').getBoundingClientRect();ray.setFromCamera(new T.Vector2((e.clientX-r.x)/r.width*2-1,-(e.clientY-r.y)/r.height*2+1),camera);}
-  $('world').addEventListener('pointerdown',e=>{if(e.button>0)return;rayAt(e);if(mode==='walk'){const p=ray.ray.intersectPlane(plane,V());if(p&&!blocked(p.x,p.z)){autoBench=false;path=findPath(p);destination.position.set(p.x,.075,p.z);destination.visible=path.length>0;}}
-    else if(ray.intersectObject(rod,true).length){if(!held)takeRod();else if(!action){dragRod={id:e.pointerId,x:e.clientX,distance:targetDistance};$('world').setPointerCapture(e.pointerId);}}
-    else if(ray.intersectObject(pad,true).length)toggleGround();});
+  $('world').addEventListener('pointerdown',e=>{if(e.button>0||mode!=='walk')return;rayAt(e);const p=ray.ray.intersectPlane(plane,V());if(p&&!blocked(p.x,p.z)){autoBench=false;path=findPath(p);destination.position.set(p.x,.075,p.z);destination.visible=path.length>0;}});
   $('world').addEventListener('pointermove',e=>{if(dragRod&&dragRod.id===e.pointerId){const w=$('world').getBoundingClientRect().width;chooseDistance(Math.round(Math.max(0,Math.min(1,dragRod.distance-(e.clientX-dragRod.x)/(w*.12)))*2)/2);}});
   ['pointerup','pointercancel','lostpointercapture'].forEach(t=>$('world').addEventListener(t,()=>{dragRod=null;}));
   window.addEventListener('pagehide',()=>{if(raf)cancelAnimationFrame(raf);raf=0;});window.addEventListener('pageshow',()=>{if(!raf){lastTime=performance.now();raf=requestAnimationFrame(frame);}});
@@ -378,16 +449,16 @@
   function rodDiscGap(){let nearest=Infinity;for(let i=0;i<=30;i++){const p=rod.localToWorld(V(-.17+.72*i/30,0,0)),radial=Math.hypot(p.x+.5,p.z-.18);nearest=Math.min(nearest,Math.hypot(Math.max(0,radial-.37),Math.max(0,Math.abs(p.y-3.155)-.04))-.058);}return nearest;}
   window.labGame=Object.freeze({snapshot:()=>{
     scene.updateMatrixWorld(true);
-    return {mode,character:'研究員',position:avatar.position.toArray(),held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),targetDistance,pathLength:path.length,groundWanted,
+    return {mode,character:'研究員',position:avatar.position.toArray(),avatarVisible:avatar.visible,held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),bench:{...bench},benchTaskIndex,benchObserved:benchObserved.slice(),benchFlowVisible:benchParticles.filter(p=>p.visible).length,staticChargeMarkersVisible:posMarks.concat(negMarks).filter(p=>p.visible).length,rodPosition:rod.getWorldPosition(V()).toArray(),plateColor:plateMaterial.color.getHexString(),leafColor:foilMaterial.color.getHexString(),targetDistance,pathLength:path.length,groundWanted,
       hand:handWorld(0).toArray(),visibleHand:(studentArms?studentArms[0].hand.getWorldPosition(V()):handWorld(0)).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),visibleGroundHand:(studentArms?studentArms[1].hand.getWorldPosition(V()):handWorld(1)).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),avatarModel:modelStatus,walkAnimationTime:studentWalk?studentWalk.time:null,
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
       studentArmPoints:studentArms?studentArms.map(a=>[a.upper,a.fore,a.hand].map(b=>b.getWorldPosition(V()).toArray())):null,
       rigArmPoints:arms.map(a=>[a.shoulder,a.elbow,a.hand].map(b=>b.getWorldPosition(V()).toArray())),
       gait:legs.map((l,i)=>({hip:l.hip.rotation.x,knee:l.knee.rotation.x,handZ:arms[i].hand.getWorldPosition(V()).applyMatrix4(avatar.matrixWorld.clone().invert()).z})),
-      stemBottom:2.40,baseTop:1.95,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries,
+      stemBottom:2.40,baseTop:1.95,groundPad:pad.position.toArray(),groundWireEnd:wirePoints.at(-1).toArray(),rodPositiveBarsVisible:rodPositiveBars.filter(bar=>bar.visible).length,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries,
       chargeFlows:assignments.flatMap((p,i)=>p.moving&&performance.now()-p.start<950?[{index:i,from:p.oldZone,to:p.zone,slot:p.slot,origin:p.from.toArray(),position:negMarks[i].position.toArray()}]:[]),
       electronMarks:negMarks.map((g,i)=>({zone:assignments[i]?.zone,position:g.position.toArray(),visible:g.visible})),
       positiveMarks:posMarks.map(g=>g.position.toArray())};
     },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
-  scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);loadStudentModel();
+  scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));posMarks.concat(negMarks).forEach(p=>p.visible=false);updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);loadStudentModel();
 })();

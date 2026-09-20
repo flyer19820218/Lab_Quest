@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#11261f"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>物理男孩：實驗室大冒險</title>
   <script>window.addEventListener('error',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+(e.message||e.target&&e.target.src&&e.target.src.split('/').pop()||'資源未載入')+'。請重新整理，或截圖告訴我。'},true);window.addEventListener('unhandledrejection',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+String(e.reason||'未知錯誤')+'。請截圖告訴我。'});setTimeout(function(){var box=document.getElementById('loading');if(box&&!box.hidden&&box.textContent==='正在打開實驗室…')box.textContent='3D 載入逾時。請重新整理；若仍無法開啟，請截圖告訴我。'},20000);</script>
-  <link rel="stylesheet" href="game.css?v=0920-06">
-  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/engine.js?v=0920-06"></script><script defer src="src/game.js?v=0920-06"></script>
+  <link rel="stylesheet" href="game.css?v=0920-08">
+  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/engine.js?v=0920-06"></script><script defer src="src/physical-boys-bench.js?v=0920-07"></script><script defer src="src/game.js?v=0920-08"></script>
 </head>
 <body>
 <main class="game-shell">
@@ -14,11 +14,34 @@
   <div class="scene-layout">
   <section id="game" aria-label="可走動的 3D 實驗室">
     <canvas id="world" tabindex="0" aria-label="3D 實驗室。使用方向鍵走動，E 操作桌上儀器。"></canvas>
-    <div class="game-toolbar"><span class="room-label"><i></i> 靜電研究室</span><span class="keys">W A S D／方向鍵走動 · E 操作 · Esc 離開</span><button id="notebook-button" type="button">背包與紀錄</button><button id="fullscreen" type="button" aria-label="全螢幕遊戲">⛶</button></div>
+    <div id="bench-hud" hidden>
+      <div class="bench-head">
+        <button id="bench-task-open" type="button" aria-expanded="false">探究任務 1 / 5</button>
+        <span id="bench-task-summary">慢慢靠近，觀察金箔。</span>
+        <span id="bench-readout" aria-live="polite">金屬盤 0 · 金箔 0 · 淨電荷 0</span>
+      </div>
+      <div id="bench-task-detail" hidden role="dialog" aria-label="物理男孩探究任務">
+        <button id="bench-task-close" type="button" aria-label="關閉任務說明">✕</button>
+        <h2 id="bench-task-title"></h2>
+        <section><h3>🤔 1. 先想一想</h3><p id="bench-think"></p></section>
+        <section><h3>👉 2. 動手實驗</h3><p id="bench-act"></p></section>
+        <section><h3>💡 3. 觀察驗證</h3><p id="bench-verify"></p></section>
+      </div>
+      <div class="bench-controls" aria-label="實驗桌操作">
+        <div class="bench-lever" id="bench-lever"><label for="bench-distance">帶電棒搖桿 <output id="bench-distance-label">遠 · 0%</output><small>右／上靠近 · 左／下移遠</small></label><div class="bench-range"><span>遠</span><input id="bench-distance" type="range" min="0" max="100" value="0" aria-label="帶電棒距離，從遠到近連續調整"><span>近</span></div></div>
+        <div class="bench-buttons">
+          <button id="bench-rod-negative" type="button" aria-pressed="true">負電棒</button><button id="bench-rod-positive" type="button" aria-pressed="false">正電棒</button><button id="bench-ground" type="button" aria-pressed="false">⚡ 接地</button>
+          <button id="bench-preset-negative" type="button">預設負電</button><button id="bench-preset-neutral" type="button">還原中性</button><button id="bench-preset-positive" type="button">預設正電</button>
+          <button id="bench-prev" type="button">⬅ 上一題</button><button id="bench-next" type="button">下一題 ➡</button><button id="bench-leave" type="button">離開實驗桌</button>
+        </div>
+      </div>
+    </div>
+    <div class="game-toolbar"><span class="room-label"><i></i> 靜電研究室</span><span class="keys">W A S D／方向鍵走動 · E 操作 · Esc 離開</span><button id="notebook-button" type="button" aria-label="背包與獎勵">🎒 Lv. 1 · 0/100</button><button id="fullscreen" type="button" aria-label="全螢幕遊戲">⛶</button></div>
     <div class="mission-card"><span id="mission-tag">第一天 · 自由探索</span><h2 id="mission-title">先到實驗桌看看吧。</h2><p id="instruction">拖左下搖桿、使用方向鍵，或點地板走過去。</p></div>
     <div id="instrument-stats" hidden><span id="net">淨電荷 0</span><span id="ground-status">接地斷開</span><span id="electron-status">遠：額外分離 0 個電子</span></div>
     <div id="walk-ui"><div id="joystick" role="group" aria-label="觸控移動搖桿"><span class="joystick-cross">＋</span><div id="stick"></div></div><button id="interact" type="button"><small>E</small><span>走到實驗桌</span></button></div>
     <p id="walk-feedback" role="status" aria-live="polite">這間實驗室是你的。走到桌邊，就能拿起器材。</p>
+    <div id="reward-toast" hidden role="status" aria-live="polite"></div>
     <div class="scene-footer"><span id="mode-label">自由走動</span><span id="held-label">雙手空著</span></div>
     <div id="loading">正在打開實驗室…</div>
     <section class="experiment-controls" id="lab-controls" hidden aria-label="人物的實驗動作">

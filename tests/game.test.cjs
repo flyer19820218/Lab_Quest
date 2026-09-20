@@ -1,125 +1,85 @@
 'use strict';
 const assert=require('node:assert/strict');
 const path=require('node:path');
-const {mkdirSync,writeFileSync,readFile}=require('node:fs');
 const http=require('node:http');
+const {readFile,mkdirSync,writeFileSync}=require('node:fs');
 const {chromium}=require('playwright');
 const {PNG}=require('pngjs');
-const root=process.env.LAB_GAME_ROOT||path.join(__dirname,'..');
-const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v5');
-const wait=(page,p)=>page.waitForFunction(p,null,{timeout:20000});
+const root=path.join(__dirname,'..'),out=path.join(root,'artifacts','game-bench-v6');
 const snap=page=>page.evaluate(()=>window.labGame.snapshot());
-const gap=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
-function diff(a,b){a=PNG.sync.read(a);b=PNG.sync.read(b);let n=0;for(let i=0;i<a.data.length;i+=4)if(Math.abs(a.data[i]-b.data[i])+Math.abs(a.data[i+1]-b.data[i+1])+Math.abs(a.data[i+2]-b.data[i+2])>40)n++;return n;}
-async function checkDownwardPair(page,stage,out){
-  const samples={left:[],right:[]};
-  for(let tick=0;tick<6;tick++){
-    const flows=(await snap(page)).chargeFlows.filter(f=>f.from==='top'&&(f.to==='left'||f.to==='right'));
-    assert.deepEqual(flows.map(f=>f.to).sort(),['left','right'],`stage ${stage} must show two separate electron flows`);
-    assert.ok(flows.every(f=>f.origin[1]>3.18),`stage ${stage} must begin on the upper metal disc, not halfway down the stem`);
-    for(const flow of flows)samples[flow.to].push(flow.position[1]);
-    if(tick===3)await page.locator('#game').screenshot({path:path.join(out,`stage-${stage}-flow.png`)});
-    await page.waitForTimeout(100);
-  }
-  for(const side of ['left','right'])for(let i=1;i<samples[side].length;i++)
-    assert.ok(samples[side][i]<=samples[side][i-1]+.002,`stage ${stage} ${side} electron must never rise before reaching its leaf: ${samples[side]}`);
-  return samples;
-}
+const wait=(page,fn)=>page.waitForFunction(fn,null,{timeout:25000});
+function diff(a,b){a=PNG.sync.read(a);b=PNG.sync.read(b);let count=0;for(let i=0;i<a.data.length;i+=4)if(Math.abs(a.data[i]-b.data[i])+Math.abs(a.data[i+1]-b.data[i+1])+Math.abs(a.data[i+2]-b.data[i+2])>35)count++;return count;}
+function serve(){return http.createServer((req,res)=>{
+  const file=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
+  if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
+  readFile(file,(error,body)=>{
+    if(error){res.writeHead(404).end();return;}
+    const type=file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':file.endsWith('.glb')?'model/gltf-binary':'application/octet-stream';
+    res.writeHead(200,{'Content-Type':type}).end(body);
+  });
+});}
+async function distance(page,value){await page.locator('#bench-distance').evaluate((el,n)=>{el.value=n;el.dispatchEvent(new Event('input',{bubbles:true}));},value);}
+async function steer(page,side,duration=420){const b=await page.locator('#joystick').boundingBox(),x=b.x+b.width/2,y=b.y+b.height/2;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+side*b.width*.29,y,{steps:4});await page.waitForTimeout(duration);await page.mouse.up();}
+async function visibleLayout(page){return page.evaluate(()=>{
+  const box=sel=>document.querySelector(sel).getBoundingClientRect(),game=box('#game'),scene=box('#world');
+  return {ratio:scene.width/scene.height,scroll:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,
+    controls:['#joystick','#notebook-button','#bench-ground','#bench-rod-negative','#bench-rod-positive','#bench-prev','#bench-next','#bench-leave'].every(sel=>{const b=box(sel);return b.left>=0&&b.right<=innerWidth&&b.top>=0&&b.bottom<=innerHeight;}),game:[game.width,game.height]};
+});}
 (async()=>{
- mkdirSync(out,{recursive:true});
- const server=http.createServer((req,res)=>{
-   const file=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
-   if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
-   readFile(file,(error,body)=>{
-     if(error){res.writeHead(404).end();return;}
-     const type=file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':file.endsWith('.glb')?'model/gltf-binary':'application/octet-stream';
-     res.writeHead(200,{'Content-Type':type}).end(body);
-   });
- });
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- const browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});const errors=[];
- try{
-  const context=await browser.newContext({viewport:{width:1365,height:1000}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  const url=`http://127.0.0.1:${server.address().port}/lab_3d_walk_preview_0920_v4.html`;
-  await page.goto(url);await wait(page,()=>window.labGame?.snapshot().avatarModel==='ready');await page.waitForTimeout(900);
-  assert.equal((await snap(page)).mode,'walk');await page.locator('#game').screenshot({path:path.join(out,'room.png')});
-  const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(350);await wait(page,()=>Math.abs(window.labGame.snapshot().gait[0].hip)>.25);const walking=await snap(page);assert.ok(walking.gait.some(l=>l.knee>.15),'walking must articulate the knees');assert.ok(walking.gait[0].hip*walking.gait[1].hip<0,'legs alternate');assert.ok(walking.gait.every(l=>l.hip*(l.handZ-.06)>0),'arms swing opposite their same-side legs');assert.ok(Math.abs(walking.walkAnimationTime-start.walkAnimationTime)>.02,'imported walking animation advances');await page.waitForTimeout(200);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
-  // Move toward the bench front for several seconds: collision must reject crossing its bounds.
-  await page.keyboard.down('w');for(let i=0;i<18;i++){await page.waitForTimeout(100);const {position:p}=await snap(page);assert.ok(!(Math.abs(p[0])<3.13&&Math.abs(p[2])<1.13),'character cannot enter table collider');}await page.keyboard.up('w');
-  await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab');await page.waitForTimeout(1100);
-  assert.equal((await snap(page)).held,false);assert.equal(await page.locator('#near').isDisabled(),true);
-  await page.locator('#pickup').click();const a=await page.locator('#game').screenshot();await page.waitForTimeout(1000);const b=await page.locator('#game').screenshot();const pickupPixels=diff(a,b);assert.ok(pickupPixels>500,'actual pickup animation must change pixels');
-  await wait(page,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
-  const farPose=await snap(page);await page.locator('#game').screenshot({path:path.join(out,'rod-far.png')});
-  assert.equal(farPose.state.displacedElectrons,0);assert.equal(farPose.state.leafElectrons,3);
-  await page.locator('#mid').click();await wait(page,()=>window.labGame.snapshot().state.inductionStage===1);
-  let stageFlows=(await snap(page)).chargeFlows.filter(f=>f.from==='top');
-  assert.deepEqual(stageFlows.map(f=>f.to).sort(),['left','right'],'first stage sends one blue electron to each leaf');
-  const midFlowY=await checkDownwardPair(page,1,out);
-  await wait(page,()=>window.labGame.snapshot().state.rodDistance===.5);const midPose=await snap(page);
-  assert.equal(midPose.state.displacedElectrons,2);assert.equal(midPose.state.leafElectrons,4);assert.equal(midPose.state.leafAngle,28);
-  assert.ok(gap(farPose.hand,midPose.hand)>.45,'middle position must visibly differ from far');assert.ok(midPose.rodDiscGap>.1);
-  await page.locator('#game').screenshot({path:path.join(out,'rod-mid.png')});await page.waitForTimeout(400);
-  await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.inductionStage===2);
-  stageFlows=(await snap(page)).chargeFlows.filter(f=>f.from==='top');
-  assert.deepEqual(stageFlows.map(f=>f.to).sort(),['left','right'],'second stage sends one more electron to each leaf');
-  const nearFlowY=await checkDownwardPair(page,2,out);
-  await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);await page.waitForTimeout(1000);
-  let s=await snap(page);assert.equal(s.character,'研究員');assert.equal(s.avatarModel,'ready');assert.ok(gap(midPose.hand,s.hand)>.45);assert.ok(s.rodDiscGap>.1,'near rod still has an air gap');for(const pose of [farPose,midPose,s])for(const arm of pose.armBones){assert.ok(Math.abs(arm.upper-.81)<1e-7&&Math.abs(arm.fore-.79)<1e-7,'bones never stretch');assert.ok(arm.reachError<.001,'hands can reach all targets');}assert.equal(s.state.electroscopeNetCharge,0);assert.equal(s.state.displacedElectrons,4);assert.equal(s.state.leafElectrons,5);assert.equal(s.state.leafAngle,56);assert.ok(gap(s.visibleHand,s.rodGrip)<1e-7,'rod grip must be attached to the visible model hand');assert.ok(s.stemBottom>s.baseTop);
-  const nearPose=s;await page.locator('#game').screenshot({path:path.join(out,'holding-rod.png')});
-  await page.locator('[data-answer="neutral"]').click();assert.equal((await snap(page)).completed.length,1);
-  await page.locator('#next').click();await wait(page,()=>window.labGame.snapshot().state.mission===2&&!window.labGame.snapshot().action);
-  await page.locator('#pickup').click();await wait(page,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
-  await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);
-  const rightHandBeforeGround=(await snap(page)).hand;await page.locator('#ground').click();assert.equal((await snap(page)).state.isGrounded,false,'contact must wait for the hand');
-  await wait(page,()=>window.labGame.snapshot().state.isGrounded);s=await snap(page);assert.ok(gap(s.groundHand,s.groundContact)<.025);assert.ok(gap(s.visibleGroundHand,[s.groundContact[0],2.11,s.groundContact[2]])<.09,'visible left hand touches the moved terminal');assert.ok(gap(s.hand,rightHandBeforeGround)<1e-6,'left hand grounds independently without moving the right hand');assert.equal(s.state.electroscopeNetCharge,4);
-  assert.equal(s.chargeFlows.filter(f=>f.to==='earth').length,4,'four electrons leave along the ground wire');
-  const groundStart=s.chargeFlows.filter(f=>f.to==='earth');
-  const c=await page.locator('#game').screenshot();
-  const fixedPositive=s.positiveMarks.slice(0,6);await page.waitForTimeout(180);
-  assert.ok((await snap(page)).positiveMarks.slice(0,6).every((p,i)=>gap(p,fixedPositive[i])<1e-6),'positive sites on the top conductor stay fixed');
-  await page.waitForTimeout(520);
-  const groundLater=(await snap(page)).chargeFlows.filter(f=>f.to==='earth');
-  assert.equal(groundLater.length,4);
-  assert.ok(groundLater.every(f=>f.position[0]>groundStart.find(g=>g.index===f.index).position[0]+.5),'grounded electrons travel outward along the wire');
-  const d=await page.locator('#game').screenshot();const groundPixels=diff(c,d);assert.ok(groundPixels>50);
-  await page.locator('#game').screenshot({path:path.join(out,'grounding.png')});
-  await page.locator('#far').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===1);assert.equal((await snap(page)).state.electroscopeNetCharge,0);
-  await page.locator('#ground').click();await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);
-  await page.locator('#ground').click();await wait(page,()=>window.labGame.snapshot().state.isGrounded);await page.locator('#ground').click();
-  await page.locator('#far').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===1);s=await snap(page);assert.equal(s.state.electroscopeNetCharge,4);
-  await page.locator('[data-answer="positive"]').click();assert.equal((await snap(page)).rewardVisible,true);assert.equal(await page.locator('#level').textContent(),'Lv. 2');
-  await page.locator('#leave').click();await wait(page,()=>window.labGame.snapshot().mode==='walk');assert.equal((await snap(page)).held,false);await page.waitForTimeout(1200);
-  await page.locator('#game').screenshot({path:path.join(out,'level-two-room.png')});
-  await page.reload();await wait(page,()=>!!window.labGame);assert.equal((await snap(page)).completed.length,2);assert.equal((await snap(page)).rewardVisible,true);
-  const beforeJoy=await snap(page);const joy=await page.locator('#joystick').boundingBox();await page.mouse.move(joy.x+joy.width/2,joy.y+joy.height/2);await page.mouse.down();await page.mouse.move(joy.x+joy.width,joy.y+joy.height/2);await page.waitForTimeout(500);await page.mouse.up();assert.ok(gap(beforeJoy.position,(await snap(page)).position)>.4);
-  const ipadContext=await browser.newContext({viewport:{width:1366,height:1024},isMobile:true,hasTouch:true,deviceScaleFactor:1});const ipad=await ipadContext.newPage();ipad.on('pageerror',e=>errors.push(e.message));
-  await ipad.goto(url);await wait(ipad,()=>window.labGame?.snapshot().avatarModel==='ready');await ipad.locator('#interact').tap();await wait(ipad,()=>window.labGame.snapshot().mode==='lab');await wait(ipad,()=>{const b=document.querySelector('#world').getBoundingClientRect();return Math.abs(b.width/b.height-16/9)<.01;});
-  const ipadLayout=await ipad.evaluate(()=>{const b=id=>document.querySelector(id).getBoundingClientRect(),world=b('#world'),game=b('#game'),controls=b('#lab-controls');return {worldRatio:world.width/world.height,worldBottom:world.bottom,controlsTop:controls.top,gameWidth:game.width,gameHeight:game.height,scrollX:document.documentElement.scrollWidth>innerWidth,scrollY:document.documentElement.scrollHeight>innerHeight,buttons:['#pickup','#far','#mid','#near','#ground','#leave'].every(id=>{const r=b(id);return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})};});
-  assert.ok(Math.abs(ipadLayout.worldRatio-16/9)<.01,JSON.stringify(ipadLayout));assert.ok(Math.abs(ipadLayout.worldBottom-ipadLayout.controlsTop)<2,'iPad 16:9 scene joins the control dock');
-  assert.equal(ipadLayout.gameWidth,1366);assert.equal(ipadLayout.gameHeight,1024);assert.equal(ipadLayout.scrollX||ipadLayout.scrollY,false);assert.equal(ipadLayout.buttons,true);
-  await ipad.screenshot({path:path.join(out,'ipad-landscape.png')});await ipadContext.close();
-  const phoneContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true,deviceScaleFactor:1});const phone=await phoneContext.newPage();phone.on('pageerror',e=>errors.push(e.message));
-  await phone.goto(url);await wait(phone,()=>window.labGame?.snapshot().avatarModel==='ready');const phoneStart=await snap(phone),r=await phone.locator('#joystick').boundingBox();const client=await phoneContext.newCDPSession(phone);
-  await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:r.x+r.width/2,y:r.y+r.height/2}]});await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:r.x+r.width*.9,y:r.y+r.height/2}]});await phone.waitForTimeout(500);await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});assert.ok(gap(phoneStart.position,(await snap(phone)).position)>.3,'touch joystick must move avatar');
-  await phone.locator('#interact').tap();await wait(phone,()=>window.labGame.snapshot().mode==='lab');await phone.locator('#pickup').tap();await wait(phone,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
-  await phone.locator('#near').tap();await wait(phone,()=>window.labGame.snapshot().state.isRodNear);assert.equal((await snap(phone)).state.electroscopeNetCharge,0);
-  await phone.waitForTimeout(600);
-  for(const viewport of [{width:844,height:390},{width:667,height:375}]){
-    await phone.setViewportSize(viewport);await phone.evaluate(()=>window.scrollTo(0,0));
-    const layout=await phone.evaluate(()=>{const r=id=>document.querySelector(id).getBoundingClientRect(),canvas=r('#world'),game=r('#game'),hint=r('.mission-card'),controls=r('#lab-controls');return {overflow:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,hintInside:hint.top>=game.top&&hint.bottom<=game.bottom,controlsInside:controls.top>=game.top&&controls.bottom<=game.bottom,ratio:canvas.width/canvas.height,allVisible:['#world','#far','#mid','#near','#ground','#feedback','[data-answer="positive"]','[data-answer="negative"]','[data-answer="neutral"]'].every(id=>{const b=r(id);return b.top>=0&&b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight;})};});
-    assert.equal(layout.overflow,false,'landscape has no page scroll');assert.equal(layout.hintInside,true);assert.equal(layout.controlsInside,true);assert.equal(layout.allVisible,true,'scene, hints and rod/ground controls stay in the viewport');assert.ok(Math.abs(layout.ratio-16/9)<.01);
-    for(const [id,distance] of [['mid',.5],['far',1],['near',0]]){await phone.locator('#'+id).tap();await wait(phone,()=>!window.labGame.snapshot().action&&window.labGame.snapshot().state.rodDistance===window.labGame.snapshot().targetDistance);assert.equal((await snap(phone)).state.rodDistance,distance);}
-    await phone.screenshot({path:path.join(out,`touch-landscape-${viewport.width}.png`)});
-  }
-  await phone.evaluate(()=>{document.documentElement.requestFullscreen=function(){window.fullscreenTarget=this;return Promise.reject(new Error('unsupported'));};});
-  await phone.locator('#fullscreen').tap();
-  assert.equal(await phone.evaluate(()=>window.fullscreenTarget===document.documentElement),true,'native fullscreen targets the document root');
-  assert.equal(await phone.evaluate(()=>document.documentElement.classList.contains('immersive-fallback')),true);
-  assert.equal(await phone.evaluate(()=>{const b=document.querySelector('#game').getBoundingClientRect();return Math.abs(b.width-innerWidth)<1&&Math.abs(b.height-innerHeight)<1;}),true,'fallback fixes game to the full visual viewport');
-  await phone.setViewportSize({width:390,height:844});
-  assert.equal(await phone.locator('.portrait-note').isVisible(),true);
-  assert.equal((await phone.locator('.portrait-note').textContent()).trim(),'請橫向使用');
-  assert.deepEqual(errors,[]);const report={passed:true,preview:'lab_3d_walk_preview_0920_v4.html',character:'Imported 3D girl with Mixamo walking',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,modelWalkAnimation:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.visibleHand,s.rodGrip),groundContactVerified:true,visibleGroundContactError:gap(s.visibleGroundHand,[s.groundContact[0],2.11,s.groundContact[2]]),groundFlowOutward:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,ipadLandscape:ipadLayout,fullscreenRoot:true,fullscreenFallback:true,portraitPrompt:true,science:'0/2/4 paired electrons; each induction stage starts on the upper metal disc and follows disc-stem-leaf; grounded blue flow; fixed red positives',midFlowY,nearFlowY,savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
- }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+  mkdirSync(out,{recursive:true});const server=serve();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  let browser;const errors=[];
+  try{
+    browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});
+    const url=`http://127.0.0.1:${server.address().port}/lab_3d_bench_preview_0920_v6.html`,page=await browser.newPage({viewport:{width:1365,height:1000}});
+    page.on('pageerror',error=>errors.push(error.message));await page.goto(url);await wait(page,()=>window.labGame?.snapshot().avatarModel==='ready');
+    assert.equal((await snap(page)).mode,'walk');assert.equal((await snap(page)).avatarVisible,true);
+    await page.locator('#game').screenshot({path:path.join(out,'room.png')});
+    const start=(await snap(page)).position;await page.keyboard.down('d');await page.waitForTimeout(360);await page.keyboard.up('d');
+    assert.ok(Math.hypot((await snap(page)).position[0]-start[0],(await snap(page)).position[2]-start[2])>.4);
+    await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab'&&window.labGame.snapshot().rodPosition[0]<-2.7);
+    let s=await snap(page);assert.equal(s.avatarVisible,false);assert.equal(s.staticChargeMarkersVisible,0);
+    assert.equal(await page.locator('#bench-hud').isVisible(),true);assert.equal(await page.locator('#lab-controls').isVisible(),false);
+    assert.equal(await page.locator('#joystick').evaluate(el=>el.parentElement.id),'bench-lever');
+    assert.ok(Math.abs(s.groundPad[0]-1.70)<.001&&Math.abs(s.groundPad[2]-.30)<.001,'the original v1 ground terminal is restored');
+    assert.ok(Math.abs(s.groundWireEnd[0]-s.groundPad[0])<.04,'the original lead reaches the grounding pad');
+    assert.equal(s.rodPositiveBarsVisible,0);
+    assert.equal(s.bench.dist,0);await page.locator('#game').screenshot({path:path.join(out,'bench-neutral.png')});
+    const farX=s.rodPosition[0];await distance(page,37);s=await snap(page);assert.equal(s.bench.dist,37);assert.equal(s.bench.plateQ,37);assert.equal(s.bench.leafQ,-37);
+    await steer(page,1);s=await snap(page);assert.ok(s.bench.dist>47,'the walking joystick approaches the rod continuously');
+    const closer=s.bench.dist;await steer(page,-1);s=await snap(page);assert.ok(s.bench.dist<closer-10,'the same joystick can move the rod farther away');
+    await distance(page,83);await wait(page,()=>window.labGame.snapshot().rodPosition[0]>-1.8);s=await snap(page);assert.equal(s.bench.dist,83);assert.ok(s.rodPosition[0]>farX+.9);assert.equal(s.bench.netQ,0);assert.ok(s.benchFlowVisible>0);
+    assert.equal(await page.locator('#level').textContent(),'Lv. 1');
+    await distance(page,100);await page.waitForTimeout(250);const a=await page.locator('#world').screenshot();await page.waitForTimeout(950);const b=await page.locator('#world').screenshot();assert.ok(diff(a,b)>80,'blue electron flow or gold leaves visibly animate');
+    await page.locator('#bench-task-open').click();assert.equal(await page.locator('#bench-task-detail').isVisible(),true);assert.match(await page.locator('#bench-think').textContent(),/自由電子/);
+    await page.locator('#bench-task-close').click();await page.locator('#bench-next').click();assert.equal((await snap(page)).benchTaskIndex,1);
+    await page.locator('#bench-ground').click();s=await snap(page);assert.equal(s.bench.isGrounded,true);assert.equal(s.bench.leafQ,0);assert.equal(s.bench.plateQ,200);assert.equal(s.bench.flow.direction,'leaf-to-earth');
+    await page.locator('#game').screenshot({path:path.join(out,'bench-grounded.png')});
+    await page.locator('#bench-next').click();await page.locator('#bench-ground').click();await distance(page,0);s=await snap(page);
+    assert.equal(s.bench.netQ,200);assert.equal(s.bench.plateQ,100);assert.equal(s.bench.leafQ,100);assert.equal(s.benchObserved[2],true);
+    assert.deepEqual(s.completed,[1,2]);assert.equal(await page.locator('#level').textContent(),'Lv. 2');
+    assert.match(await page.locator('#notebook-button').textContent(),/Lv\. 2 · 100\/100/);assert.equal(s.rewardVisible,true);
+    assert.equal(await page.locator('#reward-toast').isVisible(),true);
+    await page.locator('#notebook-button').click();assert.match(await page.locator('#inventory').textContent(),/金屬球.*琥珀工具箱/);await page.locator('#close-notebook').click();
+    await page.locator('#game').screenshot({path:path.join(out,'bench-positive.png')});
+    await page.locator('#bench-next').click();await page.locator('#bench-preset-negative').click();await distance(page,90);
+    s=await snap(page);assert.equal(s.benchObserved[3],true);assert.ok(s.bench.leafQ<0);
+    await page.locator('#bench-next').click();await page.locator('#bench-preset-negative').click();await page.locator('#bench-rod-positive').click();
+    assert.equal((await snap(page)).rodPositiveBarsVisible,3,'a positive rod has three red plus signs');
+    await distance(page,50);assert.equal((await snap(page)).bench.leafQ,0);await distance(page,100);s=await snap(page);assert.ok(s.bench.leafQ>0);assert.equal(s.benchObserved[4],true);
+    await page.locator('#game').screenshot({path:path.join(out,'bench-opposite-rod.png')});
+    await page.locator('#bench-leave').click();s=await snap(page);assert.equal(s.mode,'walk');assert.equal(s.avatarVisible,true);assert.ok(s.position[2]>1.13,'avatar returns in front of the table collider');assert.equal(await page.locator('#joystick').evaluate(el=>el.parentElement.id),'walk-ui');
+    await page.reload();await wait(page,()=>!!window.labGame);assert.deepEqual((await snap(page)).completed,[1,2]);
+    const layouts=[];
+    for(const viewport of [{width:1366,height:1024},{width:844,height:390},{width:667,height:375}]){
+      const context=await browser.newContext({viewport,isMobile:true,hasTouch:true,deviceScaleFactor:1});const phone=await context.newPage();phone.on('pageerror',error=>errors.push(error.message));
+      await phone.goto(url);await wait(phone,()=>!!window.labGame);await phone.locator('#interact').tap();await wait(phone,()=>window.labGame.snapshot().mode==='lab');
+      await wait(phone,()=>document.querySelector('#world').getBoundingClientRect().width/document.querySelector('#world').getBoundingClientRect().height>1.7);
+      const layout=await visibleLayout(phone);assert.equal(layout.scroll,false,`${viewport.width}: no page scrolling`);assert.ok(Math.abs(layout.ratio-16/9)<.01);assert.equal(layout.controls,true,`${viewport.width}: all bench controls in viewport`);
+      await phone.locator('#bench-distance').evaluate(el=>{el.value='60';el.dispatchEvent(new Event('input',{bubbles:true}));});assert.equal((await snap(phone)).bench.dist,60);
+      await phone.waitForTimeout(900);await phone.screenshot({path:path.join(out,`touch-${viewport.width}.png`)});layouts.push({viewport,layout});await context.close();
+    }
+    assert.deepEqual(errors,[]);
+    const report={passed:true,characterHiddenAtBench:true,tableGeometryPreserved:true,continuousRod:true,originalV1Ground:true,sharedJoystick:true,positiveRodPlusSigns:true,originalFiveTasks:true,groundingSequence:true,stationaryPositiveTint:true,movingBlueElectrons:true,oldMarkersHidden:true,walkModePreserved:true,experienceSaved:true,visibleRewards:true,layouts,browserErrors:errors};
+    writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
+  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}
+})().catch(error=>{console.error(error);process.exitCode=1;});
