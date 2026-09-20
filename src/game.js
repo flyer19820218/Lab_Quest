@@ -9,15 +9,16 @@
   let state=E.createState(1), mode='walk', held=false, action=null, targetDistance=1, groundWanted=false, turning=0;
   let path=[], autoBench=false, lastTime=0, raf=0, isWalking=false;
   const keys=new Set(), joystick={x:0,y:0,pointer:null};
+  const touchGraphics=navigator.maxTouchPoints>0||matchMedia('(pointer: coarse)').matches;
   const scene=new T.Scene(); scene.background=new T.Color('#b8d2c6'); scene.fog=new T.Fog('#b8d2c6',22,45);
   const camera=new T.OrthographicCamera(-8,8,4.5,-4.5,.1,80);
   let renderer;
-  try { renderer=new T.WebGLRenderer({canvas:$('world'),antialias:true,preserveDrawingBuffer:true}); }
+  try { renderer=new T.WebGLRenderer({canvas:$('world'),antialias:!touchGraphics,powerPreference:'low-power'}); }
   catch (_) { $('loading').textContent='此瀏覽器未啟用 WebGL，請用支援 3D 的瀏覽器開啟。'; return; }
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,touchGraphics?1.25:2)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.outputColorSpace=T.SRGBColorSpace; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.3;
   scene.add(new T.HemisphereLight('#e8f5ff','#7b8661',2));
-  const sun=new T.DirectionalLight('#fff1cf',3.2);sun.position.set(-4,10,6);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+  const sun=new T.DirectionalLight('#fff1cf',3.2);sun.position.set(-4,10,6);sun.castShadow=true;sun.shadow.mapSize.set(touchGraphics?1024:2048,touchGraphics?1024:2048);
   Object.assign(sun.shadow.camera,{left:-10,right:10,top:10,bottom:-10,near:.5,far:30});sun.shadow.bias=-.0004;scene.add(sun);
   const fill=new T.DirectionalLight('#bfddff',1.1);fill.position.set(5,5,-4);scene.add(fill);
   const mat=(color,roughness=.65,metalness=0)=>new T.MeshStandardMaterial({color,roughness,metalness});
@@ -75,11 +76,12 @@
   cyl(.33,.013,mat('#ed7167',.25,.2),0,1.386,0,scope);
   const leafPivots=[new T.Group(),new T.Group()];leafPivots.forEach((p,i)=>{p.position.set(0,.59,0);scope.add(p);box(.11,.41,.009,M.gold,0,-.205,i*.009,p);});
   ball(.055,.045,.04,M.gold,0,.59,.025,scope);
-  const groundBase=V(1.70,1.81,.30),padY=2.05;
+  const groundBase=V(-.20,1.81,-.70),padY=2.05;
   cyl(.25,.10,M.dark,groundBase.x,1.85,groundBase.z);cyl(.16,.15,M.metal,groundBase.x,1.96,groundBase.z);
-  const pad=cyl(.22,.065,M.trim,groundBase.x,padY,groundBase.z);const padGlyph=label('⏚','#284b50',.3);padGlyph.position.set(1.70,2.13,.38);scene.add(padGlyph);
+  const pad=cyl(.22,.065,M.trim,groundBase.x,padY,groundBase.z);const padGlyph=label('⏚','#284b50',.3);padGlyph.position.set(groundBase.x,2.13,groundBase.z+.08);scene.add(padGlyph);
   const wirePoints=[V(-.14,3.155,.18),V(.08,2.92,.38),V(.30,1.94,.52),V(1.68,1.98,.3)];
   curve(wirePoints,.021,M.rubber);
+  curve([wirePoints[wirePoints.length-1],V(1.40,1.84,-.82),V(.10,1.84,-.84),V(groundBase.x,1.98,groundBase.z)],.021,M.rubber);
   const switchArm=link(V(1.95,1.83,.3),V(2.19,2.02,.3),.023,M.trim);
   curve([V(2.18,1.83,.3),V(2.72,1.81,.3),V(2.95,.8,.22),V(3.1,.10,.2)],.024,M.rubber);
   // March: independent 3D meshes, modelled from the reference sheets (never flat sprites).
@@ -158,12 +160,66 @@
     arm.wrist.quaternion.copy(foreRotation).invert();arm.reachError=Math.max(0,distance-d);
     arm.fingers.forEach(f=>f.rotation.x=i===0&&held?-1.28:mode==='lab'&&i===1?.12:.18);
   }
+  const fallbackAvatarMeshes=[];avatar.traverse(o=>{if(o.isMesh)fallbackAvatarMeshes.push(o);});
+  let studentModel=null,studentMixer=null,studentWalk=null,studentArms=null,modelStatus='loading';
+  function aimStudentBone(bone,child,goal){
+    const from=bone.getWorldPosition(V()),current=child.getWorldPosition(V()).sub(from),desired=goal.clone().sub(from);
+    if(current.lengthSq()<1e-8||desired.lengthSq()<1e-8)return;
+    const correction=new T.Quaternion().setFromUnitVectors(current.normalize(),desired.normalize());
+    const parentQ=bone.parent.getWorldQuaternion(new T.Quaternion()),worldQ=bone.getWorldQuaternion(new T.Quaternion());
+    bone.quaternion.copy(parentQ.invert().multiply(correction).multiply(worldQ));
+    bone.updateMatrixWorld(true);
+  }
+  function updateStudent(dt){
+    if(!studentModel)return;
+    studentModel.position.set(mode==='lab'?-1.1:0,0,mode==='lab'?.65:0);
+    if(mode==='walk'&&isWalking)studentMixer.update(dt*1.2);
+    else studentMixer.setTime(.15);
+    if(mode==='lab'){
+      avatar.updateMatrixWorld(true);
+      studentArms.forEach((bones,i)=>{
+        if(i===0&&!held&&!action||i===1&&!groundWanted)return;
+        aimStudentBone(bones.upper,bones.fore,arms[i].elbow.getWorldPosition(V()));
+        aimStudentBone(bones.fore,bones.hand,arms[i].hand.getWorldPosition(V()));
+        if(i===1){
+          const contact=V(groundBase.x,padY+.06,groundBase.z);
+          for(let pass=0;pass<12;pass++){
+            aimStudentBone(bones.fore,bones.hand,contact);
+            aimStudentBone(bones.upper,bones.hand,contact);
+          }
+        }
+      });
+      if(held){
+        const grip=studentArms[0].hand.getWorldPosition(V());
+        if(rod.parent!==scene)scene.attach(rod);
+        rod.position.copy(grip);rod.quaternion.identity();
+      }
+    }
+  }
+  function loadStudentModel(){
+    if(typeof T.GLTFLoader!=='function'){modelStatus='fallback';return;}
+    new T.GLTFLoader().load('assets/characters/mixamo-walk.glb?v=0920-06',gltf=>{try{
+      const model=gltf.scene,clip=gltf.animations.find(a=>a.tracks.length>0);
+      if(!clip)throw new Error('walking animation missing');
+      const right=['RightArm','RightForeArm','RightHand'].map(name=>model.getObjectByName('mixamorig'+name));
+      const left=['LeftArm','LeftForeArm','LeftHand'].map(name=>model.getObjectByName('mixamorig'+name));
+      if([...right,...left].some(bone=>!bone))throw new Error('walking skeleton incomplete');
+      model.name='StudentAvatar';model.scale.setScalar(2.6);
+      model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+      const inPlace=clip.clone();inPlace.tracks=inPlace.tracks.filter(track=>!track.name.includes('Hips.position'));
+      studentMixer=new T.AnimationMixer(model);studentWalk=studentMixer.clipAction(inPlace);studentWalk.play();studentMixer.setTime(.15);
+      studentArms=[right,left].map(bones=>({upper:bones[0],fore:bones[1],hand:bones[2]}));
+      fallbackAvatarMeshes.forEach(o=>{o.visible=false;});avatar.add(model);studentModel=model;modelStatus='ready';
+      updateStudent(0);
+    }catch(error){modelStatus='fallback';console.warn('Walking model unavailable; using built-in researcher.',error);}
+    },undefined,error=>{modelStatus='fallback';console.warn('Walking model unavailable; using built-in researcher.',error);});
+  }
   // Instrument is parented to the hand only after the pickup animation reaches it.
   const rod=new T.Group(),rodGrip=new T.Object3D();rod.add(rodGrip);scene.add(rod);
   const shaft=cyl(.058,.72,C.frame,.19,0,0,rod);shaft.rotation.z=Math.PI/2;
   const handle=cyl(.069,.22,M.rubber,-.07,0,0,rod);handle.rotation.z=Math.PI/2;
   for(const x of [.24,.36,.48])box(.055,.012,.012,M.electron,x,0,.058,rod);
-  const RACK=V(-1.60,1.88,-.05),FAR=V(-1.05,2.35,-.70),NEAR=V(-1.60,3.15,.18),PRESS=V(1.70,2.235,.30),IDLE=V(.78,1.92,-.53),STATION=V(.05,0,-1.15);
+  const RACK=V(-1.60,1.88,-.05),FAR=V(-1.05,2.35,-.70),NEAR=V(-1.60,3.15,.18),PRESS=V(groundBase.x,2.235,groundBase.z),IDLE=V(.78,1.92,-.53),STATION=V(.05,0,-1.15);
   rod.position.copy(RACK);
   for(const x of [-1.89,-1.24])box(.08,.055,.24,M.trim,x,1.835,-.05);
   const posMarks=[],negMarks=[];let assignments=[];
@@ -189,14 +245,14 @@
   function dispatch(a){const next=E.reduce(state,a);if(next!==state){const moved=next.topElectrons!==state.topElectrons||next.leafElectrons!==state.leafElectrons||next.electronCount!==state.electronCount;state=next;if(moved)rearrange();updateUI();}}
   const messages={ready:'先拿起負電棒，控制人物的手靠近圓盤。','induced-neutral':'第二段：左右鋁箔再各分離 1 個藍色電子，共增加 2 個；累計 4 個。正電荷固定在金屬上。','induction-reversed':'棒移遠，藍色電子回到上方導體，金箔閉合。','ready-to-ground':'第二段完成：累計 4 個藍色電子分離到鋁箔。保持負棒靠近，再用左手接地。','electrons-to-earth':'接地已接通，藍色電子沿接地線流出；紅色正電荷仍固定在金屬上。接著抬起左手。','charge-isolated':'手已抬起，接地斷開。最後再移走負電棒。','positive-remains':'電子流走後留下淨正電，金箔在移棒後仍張開。','wrong-order':'先移棒時，地面把電子補回來了。再試試先斷地。','ground-without-rod':'棒還沒靠近；接地不能讓中性驗電器留下電荷。','rod-too-early':'還沒接地就移棒，驗電器的總電荷仍是零。','observe-first':'先完成操作，再回答總電荷。','not-net-charge':'金箔張開不等於總電荷改變。想想電子有沒有進出。','electrons-left':'離開的是電子，因此最後留下哪一種淨電荷？','concept-correct':'實驗與判斷都完成了！'};
   function saveProgress(){try{localStorage.setItem(saveKey,JSON.stringify(completed));}catch(_){$('feedback').textContent+='（此瀏覽器無法儲存，進度僅保留本次。）';}}
-  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('inventory').replaceChildren();['March：方框眼鏡、深藍外套、科學 T 恤','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
+  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('inventory').replaceChildren();['研究員：藍綠髮、粉色上衣、實驗探險裝','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
   function updateUI(){
     const lab=mode==='lab';$('lab-controls').hidden=!lab;$('walk-ui').hidden=lab;$('instrument-stats').hidden=!lab;
     document.querySelector('.game-shell').classList.toggle('is-lab',lab);
     $('mode-label').textContent=lab?'實驗桌 · 人物操作':'自由走動';$('held-label').textContent=held?'手持負電棒':'雙手空著';
     $('mission-tag').textContent=lab?'實驗 '+state.mission+' / 2 · 靜電研究':'第一天 · 自由探索';
     $('mission-title').textContent=lab?(state.mission===1?'不碰它，金箔也會動？':'把電荷留下來。'):'先到實驗桌看看吧。';
-    $('instruction').textContent=lab?(held?(state.mission===1?'右手選「遠、中、近」，觀察金箔的變化。':'右手靠近 → 左手接地 → 抬左手 → 移棒。'):'點負電棒或按「拿起」，March 會伸出右手。'):'拖左下搖桿、使用方向鍵，或點地板走過去。';
+    $('instruction').textContent=lab?(held?(state.mission===1?'右手選「遠、中、近」，觀察金箔的變化。':'右手靠近 → 左手接地 → 抬左手 → 移棒。'):'點負電棒或按「拿起」，研究員會伸出右手。'):'拖左下搖桿、使用方向鍵，或點地板走過去。';
     $('pickup').disabled=held||!!action;
     for(const [id,d] of [['near',0],['mid',.5],['far',1]]){$(id).disabled=!held||!!action;$(id).setAttribute('aria-pressed',String(held&&targetDistance===d));}
     $('ground').disabled=state.mission!==2||!held||!!action;$('ground').setAttribute('aria-pressed',String(groundWanted));$('ground').textContent=groundWanted?'抬左手，斷地':'左手接地';
@@ -204,7 +260,7 @@
     $('net').textContent='淨電荷 '+(state.electroscopeNetCharge>0?'+':'')+state.electroscopeNetCharge;
     $('ground-status').textContent=state.isGrounded?'接地接通':'接地斷開';
     $('electron-status').textContent=state.inductionStage===0?'遠：額外分離 0 個電子':state.inductionStage===1?'中：第一段左右各 1 個，共 2 個電子':'近：第二段左右再各 1 個，累計 4 個電子';
-    $('action-caption').textContent=action?'March 正在'+action.label+'…':held?'右手持棒：'+(targetDistance===0?'近':targetDistance===.5?'中':'遠')+'。也能拖曳負電棒切換三段；左手獨立操作接地。':'負電棒放在桌上。先拿起，再進行實驗。';
+    $('action-caption').textContent=action?'研究員正在'+action.label+'…':held?'右手持棒：'+(targetDistance===0?'近':targetDistance===.5?'中':'遠')+'。也能拖曳負電棒切換三段；左手獨立操作接地。':'負電棒放在桌上。先拿起，再進行實驗。';
     $('question').hidden=!lab||!state.operationComplete||state.completed;
     $('question-text').textContent=state.mission===1?'負棒沒碰到圓盤，驗電器的總電荷是？':'斷地、移棒後，驗電器帶什麼電？';
     $('next').hidden=!lab||!state.completed||state.mission!==1;
@@ -255,9 +311,11 @@
     setLink(switchArm,V(1.95,1.83,.3),state.isGrounded?V(2.18,1.83,.3):V(2.19,2.02,.3));
   }
   const camWalk=V(9,9.5,12),camLab=V(3.2,4.8,8.4),look=new T.Vector3(),camAim=V(0,1,0);let camWidth=16;
-  function resize(){const b=$('world').getBoundingClientRect();renderer.setSize(b.width,b.height,false);updateCamera();}
-  function updateCamera(){const b=$('world').getBoundingClientRect(),ratio=b.width/b.height;camera.left=-camWidth/2;camera.right=camWidth/2;camera.top=camWidth/ratio/2;camera.bottom=-camera.top;camera.updateProjectionMatrix();}
-  new ResizeObserver(resize).observe($('game'));camera.position.copy(camWalk);
+  function resize(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;renderer.setSize(b.width,b.height,false);updateCamera();}
+  function updateCamera(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;const ratio=b.width/b.height;camera.left=-camWidth/2;camera.right=camWidth/2;camera.top=camWidth/ratio/2;camera.bottom=-camera.top;camera.updateProjectionMatrix();}
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(resize).observe($('game'));
+  window.addEventListener('resize',resize);if(window.visualViewport)window.visualViewport.addEventListener('resize',resize);
+  camera.position.copy(camWalk);
   function frame(now){
     raf=0;const dt=Math.min(.05,(now-lastTime)/1000||.016);lastTime=now;
     if(mode==='walk'){
@@ -280,7 +338,7 @@
       head.rotation.y+=(held?-.20-head.rotation.y:-head.rotation.y)*Math.min(1,dt*4);head.rotation.x+=((held?.11:0)-head.rotation.x)*Math.min(1,dt*4);
     }
     const blend=1-Math.exp(-dt*5);camera.position.lerp(mode==='lab'?camLab:camWalk,blend);camAim.lerp(mode==='lab'?V(0,2.30,0):V(0,1,0),blend);camera.lookAt(camAim);camWidth+=((mode==='lab'?7.6:16)-camWidth)*blend;updateCamera();
-    animateCharges(now,dt);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
+    updateStudent(dt);animateCharges(now,dt);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
   }
   $('interact').addEventListener('click',goBench);$('pickup').addEventListener('click',takeRod);
   function chooseDistance(distance){if(held&&!action){targetDistance=distance;updateUI();}}
@@ -320,14 +378,16 @@
   function rodDiscGap(){let nearest=Infinity;for(let i=0;i<=30;i++){const p=rod.localToWorld(V(-.17+.72*i/30,0,0)),radial=Math.hypot(p.x+.5,p.z-.18);nearest=Math.min(nearest,Math.hypot(Math.max(0,radial-.37),Math.max(0,Math.abs(p.y-3.155)-.04))-.058);}return nearest;}
   window.labGame=Object.freeze({snapshot:()=>{
     scene.updateMatrixWorld(true);
-    return {mode,character:'March',position:avatar.position.toArray(),held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),targetDistance,pathLength:path.length,groundWanted,
-      hand:handWorld(0).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),
+    return {mode,character:'研究員',position:avatar.position.toArray(),held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),targetDistance,pathLength:path.length,groundWanted,
+      hand:handWorld(0).toArray(),visibleHand:(studentArms?studentArms[0].hand.getWorldPosition(V()):handWorld(0)).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),visibleGroundHand:(studentArms?studentArms[1].hand.getWorldPosition(V()):handWorld(1)).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),avatarModel:modelStatus,walkAnimationTime:studentWalk?studentWalk.time:null,
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
+      studentArmPoints:studentArms?studentArms.map(a=>[a.upper,a.fore,a.hand].map(b=>b.getWorldPosition(V()).toArray())):null,
+      rigArmPoints:arms.map(a=>[a.shoulder,a.elbow,a.hand].map(b=>b.getWorldPosition(V()).toArray())),
       gait:legs.map((l,i)=>({hip:l.hip.rotation.x,knee:l.knee.rotation.x,handZ:arms[i].hand.getWorldPosition(V()).applyMatrix4(avatar.matrixWorld.clone().invert()).z})),
       stemBottom:2.40,baseTop:1.95,completed:completed.slice(),rewardVisible:rewardRack.visible,webgl:renderer.getContext() instanceof WebGL2RenderingContext,geometryCount:renderer.info.memory.geometries,
       chargeFlows:assignments.flatMap((p,i)=>p.moving&&performance.now()-p.start<950?[{index:i,from:p.oldZone,to:p.zone,slot:p.slot,origin:p.from.toArray(),position:negMarks[i].position.toArray()}]:[]),
       electronMarks:negMarks.map((g,i)=>({zone:assignments[i]?.zone,position:g.position.toArray(),visible:g.visible})),
       positiveMarks:posMarks.map(g=>g.position.toArray())};
     },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
-  scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);
+  scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);loadStudentModel();
 })();

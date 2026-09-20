@@ -1,12 +1,12 @@
 'use strict';
 const assert=require('node:assert/strict');
 const path=require('node:path');
-const {pathToFileURL}=require('node:url');
-const {mkdirSync,writeFileSync}=require('node:fs');
+const {mkdirSync,writeFileSync,readFile}=require('node:fs');
+const http=require('node:http');
 const {chromium}=require('playwright');
 const {PNG}=require('pngjs');
 const root=process.env.LAB_GAME_ROOT||path.join(__dirname,'..');
-const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v4');
+const out=process.env.LAB_GAME_OUTPUT||path.join(root,'artifacts','game-3d-v5');
 const wait=(page,p)=>page.waitForFunction(p,null,{timeout:20000});
 const snap=page=>page.evaluate(()=>window.labGame.snapshot());
 const gap=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
@@ -26,13 +26,24 @@ async function checkDownwardPair(page,stage,out){
   return samples;
 }
 (async()=>{
- mkdirSync(out,{recursive:true});const browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});const errors=[];
+ mkdirSync(out,{recursive:true});
+ const server=http.createServer((req,res)=>{
+   const file=path.resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));
+   if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
+   readFile(file,(error,body)=>{
+     if(error){res.writeHead(404).end();return;}
+     const type=file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css; charset=utf-8':file.endsWith('.js')?'text/javascript; charset=utf-8':file.endsWith('.glb')?'model/gltf-binary':'application/octet-stream';
+     res.writeHead(200,{'Content-Type':type}).end(body);
+   });
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});const errors=[];
  try{
   const context=await browser.newContext({viewport:{width:1365,height:1000}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  const url=pathToFileURL(path.join(root,'lab_3d_walk_preview_0920_v4.html')).href;
-  await page.goto(url);await wait(page,()=>!!window.labGame);await page.waitForTimeout(900);
+  const url=`http://127.0.0.1:${server.address().port}/lab_3d_walk_preview_0920_v4.html`;
+  await page.goto(url);await wait(page,()=>window.labGame?.snapshot().avatarModel==='ready');await page.waitForTimeout(900);
   assert.equal((await snap(page)).mode,'walk');await page.locator('#game').screenshot({path:path.join(out,'room.png')});
-  const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(350);await wait(page,()=>Math.abs(window.labGame.snapshot().gait[0].hip)>.25);const walking=await snap(page);assert.ok(walking.gait.some(l=>l.knee>.15),'walking must articulate the knees');assert.ok(walking.gait[0].hip*walking.gait[1].hip<0,'legs alternate');assert.ok(walking.gait.every(l=>l.hip*(l.handZ-.06)>0),'arms swing opposite their same-side legs');await page.waitForTimeout(200);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
+  const start=await snap(page);await page.keyboard.down('d');await page.waitForTimeout(350);await wait(page,()=>Math.abs(window.labGame.snapshot().gait[0].hip)>.25);const walking=await snap(page);assert.ok(walking.gait.some(l=>l.knee>.15),'walking must articulate the knees');assert.ok(walking.gait[0].hip*walking.gait[1].hip<0,'legs alternate');assert.ok(walking.gait.every(l=>l.hip*(l.handZ-.06)>0),'arms swing opposite their same-side legs');assert.ok(Math.abs(walking.walkAnimationTime-start.walkAnimationTime)>.02,'imported walking animation advances');await page.waitForTimeout(200);await page.keyboard.up('d');const moved=await snap(page);assert.ok(gap(start.position,moved.position)>.6,'WASD must move the actual avatar');
   // Move toward the bench front for several seconds: collision must reject crossing its bounds.
   await page.keyboard.down('w');for(let i=0;i<18;i++){await page.waitForTimeout(100);const {position:p}=await snap(page);assert.ok(!(Math.abs(p[0])<3.13&&Math.abs(p[2])<1.13),'character cannot enter table collider');}await page.keyboard.up('w');
   await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab');await page.waitForTimeout(1100);
@@ -54,14 +65,14 @@ async function checkDownwardPair(page,stage,out){
   assert.deepEqual(stageFlows.map(f=>f.to).sort(),['left','right'],'second stage sends one more electron to each leaf');
   const nearFlowY=await checkDownwardPair(page,2,out);
   await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);await page.waitForTimeout(1000);
-  let s=await snap(page);assert.equal(s.character,'March');assert.ok(gap(midPose.hand,s.hand)>.45);assert.ok(s.rodDiscGap>.1,'near rod still has an air gap');for(const pose of [farPose,midPose,s])for(const arm of pose.armBones){assert.ok(Math.abs(arm.upper-.81)<1e-7&&Math.abs(arm.fore-.79)<1e-7,'bones never stretch');assert.ok(arm.reachError<.001,'hands can reach all targets');}assert.equal(s.state.electroscopeNetCharge,0);assert.equal(s.state.displacedElectrons,4);assert.equal(s.state.leafElectrons,5);assert.equal(s.state.leafAngle,56);assert.ok(gap(s.hand,s.rodGrip)<1e-7,'rod grip must be attached to the hand');assert.ok(s.stemBottom>s.baseTop);
+  let s=await snap(page);assert.equal(s.character,'研究員');assert.equal(s.avatarModel,'ready');assert.ok(gap(midPose.hand,s.hand)>.45);assert.ok(s.rodDiscGap>.1,'near rod still has an air gap');for(const pose of [farPose,midPose,s])for(const arm of pose.armBones){assert.ok(Math.abs(arm.upper-.81)<1e-7&&Math.abs(arm.fore-.79)<1e-7,'bones never stretch');assert.ok(arm.reachError<.001,'hands can reach all targets');}assert.equal(s.state.electroscopeNetCharge,0);assert.equal(s.state.displacedElectrons,4);assert.equal(s.state.leafElectrons,5);assert.equal(s.state.leafAngle,56);assert.ok(gap(s.visibleHand,s.rodGrip)<1e-7,'rod grip must be attached to the visible model hand');assert.ok(s.stemBottom>s.baseTop);
   const nearPose=s;await page.locator('#game').screenshot({path:path.join(out,'holding-rod.png')});
   await page.locator('[data-answer="neutral"]').click();assert.equal((await snap(page)).completed.length,1);
   await page.locator('#next').click();await wait(page,()=>window.labGame.snapshot().state.mission===2&&!window.labGame.snapshot().action);
   await page.locator('#pickup').click();await wait(page,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
   await page.locator('#near').click();await wait(page,()=>window.labGame.snapshot().state.rodDistance===0);
   const rightHandBeforeGround=(await snap(page)).hand;await page.locator('#ground').click();assert.equal((await snap(page)).state.isGrounded,false,'contact must wait for the hand');
-  await wait(page,()=>window.labGame.snapshot().state.isGrounded);s=await snap(page);assert.ok(gap(s.groundHand,s.groundContact)<.025);assert.ok(gap(s.hand,rightHandBeforeGround)<1e-6,'left hand grounds independently without moving the right hand');assert.equal(s.state.electroscopeNetCharge,4);
+  await wait(page,()=>window.labGame.snapshot().state.isGrounded);s=await snap(page);assert.ok(gap(s.groundHand,s.groundContact)<.025);assert.ok(gap(s.visibleGroundHand,[s.groundContact[0],2.11,s.groundContact[2]])<.09,'visible left hand touches the moved terminal');assert.ok(gap(s.hand,rightHandBeforeGround)<1e-6,'left hand grounds independently without moving the right hand');assert.equal(s.state.electroscopeNetCharge,4);
   assert.equal(s.chargeFlows.filter(f=>f.to==='earth').length,4,'four electrons leave along the ground wire');
   const groundStart=s.chargeFlows.filter(f=>f.to==='earth');
   const c=await page.locator('#game').screenshot();
@@ -83,13 +94,13 @@ async function checkDownwardPair(page,stage,out){
   await page.reload();await wait(page,()=>!!window.labGame);assert.equal((await snap(page)).completed.length,2);assert.equal((await snap(page)).rewardVisible,true);
   const beforeJoy=await snap(page);const joy=await page.locator('#joystick').boundingBox();await page.mouse.move(joy.x+joy.width/2,joy.y+joy.height/2);await page.mouse.down();await page.mouse.move(joy.x+joy.width,joy.y+joy.height/2);await page.waitForTimeout(500);await page.mouse.up();assert.ok(gap(beforeJoy.position,(await snap(page)).position)>.4);
   const ipadContext=await browser.newContext({viewport:{width:1366,height:1024},isMobile:true,hasTouch:true,deviceScaleFactor:1});const ipad=await ipadContext.newPage();ipad.on('pageerror',e=>errors.push(e.message));
-  await ipad.goto(url);await wait(ipad,()=>!!window.labGame);await ipad.locator('#interact').tap();await wait(ipad,()=>window.labGame.snapshot().mode==='lab');
+  await ipad.goto(url);await wait(ipad,()=>window.labGame?.snapshot().avatarModel==='ready');await ipad.locator('#interact').tap();await wait(ipad,()=>window.labGame.snapshot().mode==='lab');await wait(ipad,()=>{const b=document.querySelector('#world').getBoundingClientRect();return Math.abs(b.width/b.height-16/9)<.01;});
   const ipadLayout=await ipad.evaluate(()=>{const b=id=>document.querySelector(id).getBoundingClientRect(),world=b('#world'),game=b('#game'),controls=b('#lab-controls');return {worldRatio:world.width/world.height,worldBottom:world.bottom,controlsTop:controls.top,gameWidth:game.width,gameHeight:game.height,scrollX:document.documentElement.scrollWidth>innerWidth,scrollY:document.documentElement.scrollHeight>innerHeight,buttons:['#pickup','#far','#mid','#near','#ground','#leave'].every(id=>{const r=b(id);return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight;})};});
-  assert.ok(Math.abs(ipadLayout.worldRatio-16/9)<.01);assert.ok(Math.abs(ipadLayout.worldBottom-ipadLayout.controlsTop)<2,'iPad 16:9 scene joins the control dock');
+  assert.ok(Math.abs(ipadLayout.worldRatio-16/9)<.01,JSON.stringify(ipadLayout));assert.ok(Math.abs(ipadLayout.worldBottom-ipadLayout.controlsTop)<2,'iPad 16:9 scene joins the control dock');
   assert.equal(ipadLayout.gameWidth,1366);assert.equal(ipadLayout.gameHeight,1024);assert.equal(ipadLayout.scrollX||ipadLayout.scrollY,false);assert.equal(ipadLayout.buttons,true);
   await ipad.screenshot({path:path.join(out,'ipad-landscape.png')});await ipadContext.close();
   const phoneContext=await browser.newContext({viewport:{width:844,height:390},isMobile:true,hasTouch:true,deviceScaleFactor:1});const phone=await phoneContext.newPage();phone.on('pageerror',e=>errors.push(e.message));
-  await phone.goto(url);await wait(phone,()=>!!window.labGame);const phoneStart=await snap(phone),r=await phone.locator('#joystick').boundingBox();const client=await phoneContext.newCDPSession(phone);
+  await phone.goto(url);await wait(phone,()=>window.labGame?.snapshot().avatarModel==='ready');const phoneStart=await snap(phone),r=await phone.locator('#joystick').boundingBox();const client=await phoneContext.newCDPSession(phone);
   await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:r.x+r.width/2,y:r.y+r.height/2}]});await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:r.x+r.width*.9,y:r.y+r.height/2}]});await phone.waitForTimeout(500);await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});assert.ok(gap(phoneStart.position,(await snap(phone)).position)>.3,'touch joystick must move avatar');
   await phone.locator('#interact').tap();await wait(phone,()=>window.labGame.snapshot().mode==='lab');await phone.locator('#pickup').tap();await wait(phone,()=>window.labGame.snapshot().held&&!window.labGame.snapshot().action);
   await phone.locator('#near').tap();await wait(phone,()=>window.labGame.snapshot().state.isRodNear);assert.equal((await snap(phone)).state.electroscopeNetCharge,0);
@@ -109,6 +120,6 @@ async function checkDownwardPair(page,stage,out){
   await phone.setViewportSize({width:390,height:844});
   assert.equal(await phone.locator('.portrait-note').isVisible(),true);
   assert.equal((await phone.locator('.portrait-note').textContent()).trim(),'請橫向使用');
-  assert.deepEqual(errors,[]);const report={passed:true,preview:'lab_3d_walk_preview_0920_v4.html',character:'March articulated 3D',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.hand,s.rodGrip),groundContactVerified:true,groundFlowOutward:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,ipadLandscape:ipadLayout,fullscreenRoot:true,fullscreenFallback:true,portraitPrompt:true,science:'0/2/4 paired electrons; each induction stage starts on the upper metal disc and follows disc-stem-leaf; grounded blue flow; fixed red positives',midFlowY,nearFlowY,savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
- }finally{await browser.close();}
+  assert.deepEqual(errors,[]);const report={passed:true,preview:'lab_3d_walk_preview_0920_v4.html',character:'Imported 3D girl with Mixamo walking',keyboard:true,tableCollision:true,automaticWalking:true,touchJoystick:true,modelWalkAnimation:true,kneesAndOppositeArmSwing:true,fixedArmLengths:[.81,.79],threeRodPositions:true,handTravelPerStage:gap(farPose.hand,midPose.hand),rodAirGaps:[farPose.rodDiscGap,midPose.rodDiscGap,nearPose.rodDiscGap],handGripError:gap(s.visibleHand,s.rodGrip),groundContactVerified:true,visibleGroundContactError:gap(s.visibleGroundHand,[s.groundContact[0],2.11,s.groundContact[2]]),groundFlowOutward:true,independentLeftHand:true,mobileSceneAndControlsVisible:true,ipadLandscape:ipadLayout,fullscreenRoot:true,fullscreenFallback:true,portraitPrompt:true,science:'0/2/4 paired electrons; each induction stage starts on the upper metal disc and follows disc-stem-leaf; grounded blue flow; fixed red positives',midFlowY,nearFlowY,savedRewards:true,animationPixels:{pickup:pickupPixels,grounding:groundPixels},browserErrors:errors};writeFileSync(path.join(out,'results.json'),JSON.stringify(report,null,2));console.log(report);
+ }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

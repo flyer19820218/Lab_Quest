@@ -4,12 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#11261f"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>物理男孩：實驗室大冒險</title>
-  <link rel="stylesheet" href="game.css?v=0920-05">
-  <script defer src="vendor/three.min.js"></script><script defer src="src/engine.js?v=0920-05"></script><script defer src="src/game.js?v=0920-05"></script>
+  <script>window.addEventListener('error',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+(e.message||e.target&&e.target.src&&e.target.src.split('/').pop()||'資源未載入')+'。請重新整理，或截圖告訴我。'},true);window.addEventListener('unhandledrejection',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+String(e.reason||'未知錯誤')+'。請截圖告訴我。'});setTimeout(function(){var box=document.getElementById('loading');if(box&&!box.hidden&&box.textContent==='正在打開實驗室…')box.textContent='3D 載入逾時。請重新整理；若仍無法開啟，請截圖告訴我。'},20000);</script>
+  <link rel="stylesheet" href="game.css?v=0920-06">
+  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/engine.js?v=0920-06"></script><script defer src="src/game.js?v=0920-06"></script>
 </head>
 <body>
 <main class="game-shell">
-  <header><div class="identity"><span class="brand">⚛</span><div><small>物理男孩 · March 的實驗室生活</small><h1>實驗室大冒險</h1></div></div><div class="level"><strong id="level">Lv. 1</strong><span id="xp">0 / 100 經驗</span><progress id="xp-bar" max="100" value="0"></progress></div></header>
+  <header><div class="identity"><span class="brand">⚛</span><div><small>物理男孩 · 研究員的實驗室生活</small><h1>實驗室大冒險</h1></div></div><div class="level"><strong id="level">Lv. 1</strong><span id="xp">0 / 100 經驗</span><progress id="xp-bar" max="100" value="0"></progress></div></header>
   <div class="scene-layout">
   <section id="game" aria-label="可走動的 3D 實驗室">
     <canvas id="world" tabindex="0" aria-label="3D 實驗室。使用方向鍵走動，E 操作桌上儀器。"></canvas>
