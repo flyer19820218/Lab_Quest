@@ -162,7 +162,7 @@
     arm.fingers.forEach(f=>f.rotation.x=i===0&&held?-1.28:mode==='lab'&&i===1?.12:.18);
   }
   const fallbackAvatarMeshes=[];avatar.traverse(o=>{if(o.isMesh)fallbackAvatarMeshes.push(o);});
-  let studentModel=null,studentMixer=null,studentWalk=null,studentArms=null,modelStatus='loading';
+  let studentModel=null,studentMixer=null,studentWalk=null,studentIdle=null,studentWalking=false,studentArms=null,modelStatus='loading',characterAsset=null;
   function aimStudentBone(bone,child,goal){
     const from=bone.getWorldPosition(V()),current=child.getWorldPosition(V()).sub(from),desired=goal.clone().sub(from);
     if(current.lengthSq()<1e-8||desired.lengthSq()<1e-8)return;
@@ -174,9 +174,13 @@
   function updateStudent(dt){
     if(!studentModel)return;
     studentModel.position.set(mode==='lab'?-1.1:0,0,mode==='lab'?.65:0);
-    if(mode==='walk'&&isWalking)studentMixer.update(dt*1.2);
-    else studentMixer.setTime(.15);
-    if(mode==='lab'){
+    const walking=mode==='walk'&&isWalking;
+    if(walking!==studentWalking){
+      const from=studentWalking?studentWalk:studentIdle,to=walking?studentWalk:studentIdle;
+      to.reset().setEffectiveWeight(1).play();from.crossFadeTo(to,.18,false);studentWalking=walking;
+    }
+    studentMixer.update(dt);
+    if(mode==='lab'&&studentArms){
       avatar.updateMatrixWorld(true);
       studentArms.forEach((bones,i)=>{
         if(i===0&&!held&&!action||i===1&&!groundWanted)return;
@@ -197,23 +201,38 @@
       }
     }
   }
-  function loadStudentModel(){
+  async function loadStudentModel(){
     if(typeof T.GLTFLoader!=='function'){modelStatus='fallback';return;}
-    new T.GLTFLoader().load('assets/characters/mixamo-walk.glb?v=0920-06',gltf=>{try{
-      const model=gltf.scene,clip=gltf.animations.find(a=>a.tracks.length>0);
+    try{
+      const response=await fetch('assets/characters/catalog.json?v=0924-01');
+      if(!response.ok)throw new Error('Character catalog unavailable');
+      const catalog=await response.json();characterAsset=catalog.characters[catalog.defaultPlayer];
+      if(!characterAsset)throw new Error('Player asset missing from catalog');
+      new T.GLTFLoader().load(characterAsset.url,gltf=>{try{
+      const model=gltf.scene,clip=gltf.animations.find(a=>a.name===characterAsset.walkClip&&a.tracks.length>0);
       if(!clip)throw new Error('walking animation missing');
-      const right=['RightArm','RightForeArm','RightHand'].map(name=>model.getObjectByName('mixamorig'+name));
-      const left=['LeftArm','LeftForeArm','LeftHand'].map(name=>model.getObjectByName('mixamorig'+name));
+      const right=['upperarm_r','lowerarm_r','hand_r'].map(name=>model.getObjectByName(name));
+      const left=['upperarm_l','lowerarm_l','hand_l'].map(name=>model.getObjectByName(name));
       if([...right,...left].some(bone=>!bone))throw new Error('walking skeleton incomplete');
-      model.name='StudentAvatar';model.scale.setScalar(2.6);
+      model.name='MarchAvatar';model.rotation.y=characterAsset.forwardYaw;
+      model.updateMatrixWorld(true);
+      const bounds=new T.Box3().setFromObject(model),height=bounds.max.y-bounds.min.y;
+      if(!Number.isFinite(height)||height<.001)throw new Error('Invalid character height');
+      const scale=characterAsset.height/height,center=bounds.getCenter(V());model.scale.multiplyScalar(scale);
+      model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+      const container=new T.Group();container.name='PlayerVisual';container.add(model);
       model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
-      const inPlace=clip.clone();inPlace.tracks=inPlace.tracks.filter(track=>!track.name.includes('Hips.position'));
-      studentMixer=new T.AnimationMixer(model);studentWalk=studentMixer.clipAction(inPlace);studentWalk.play();studentMixer.setTime(.15);
+      // Mesh2Motion's pelvis position includes vertical bounce through a rotated
+      // root. Preserve it: dropping every position track corrupts foot placement.
+      studentMixer=new T.AnimationMixer(model);studentWalk=studentMixer.clipAction(clip);
+      studentIdle=studentMixer.clipAction(window.LabCharacterAnimation.makeRestClip(T,clip));
+      studentWalk.setEffectiveTimeScale(1.2).setEffectiveWeight(0).play();studentIdle.play();studentMixer.update(0);
       studentArms=[right,left].map(bones=>({upper:bones[0],fore:bones[1],hand:bones[2]}));
-      fallbackAvatarMeshes.forEach(o=>{o.visible=false;});avatar.add(model);studentModel=model;modelStatus='ready';
+      fallbackAvatarMeshes.forEach(o=>{o.visible=false;});avatar.add(container);studentModel=container;modelStatus='ready';
       updateStudent(0);
     }catch(error){modelStatus='fallback';console.warn('Walking model unavailable; using built-in researcher.',error);}
     },undefined,error=>{modelStatus='fallback';console.warn('Walking model unavailable; using built-in researcher.',error);});
+    }catch(error){modelStatus='fallback';console.warn('Character catalog unavailable; using built-in researcher.',error);}
   }
   // Instrument is parented to the hand only after the pickup animation reaches it.
   const rod=new T.Group(),rodGrip=new T.Object3D();rod.add(rodGrip);scene.add(rod);
@@ -251,7 +270,7 @@
   function dispatch(a){const next=E.reduce(state,a);if(next!==state){const moved=next.topElectrons!==state.topElectrons||next.leafElectrons!==state.leafElectrons||next.electronCount!==state.electronCount;state=next;if(moved)rearrange();updateUI();}}
   const messages={ready:'先拿起負電棒，控制人物的手靠近圓盤。','induced-neutral':'第二段：左右鋁箔再各分離 1 個藍色電子，共增加 2 個；累計 4 個。正電荷固定在金屬上。','induction-reversed':'棒移遠，藍色電子回到上方導體，金箔閉合。','ready-to-ground':'第二段完成：累計 4 個藍色電子分離到鋁箔。保持負棒靠近，再用左手接地。','electrons-to-earth':'接地已接通，藍色電子沿接地線流出；紅色正電荷仍固定在金屬上。接著抬起左手。','charge-isolated':'手已抬起，接地斷開。最後再移走負電棒。','positive-remains':'電子流走後留下淨正電，金箔在移棒後仍張開。','wrong-order':'先移棒時，地面把電子補回來了。再試試先斷地。','ground-without-rod':'棒還沒靠近；接地不能讓中性驗電器留下電荷。','rod-too-early':'還沒接地就移棒，驗電器的總電荷仍是零。','observe-first':'先完成操作，再回答總電荷。','not-net-charge':'金箔張開不等於總電荷改變。想想電子有沒有進出。','electrons-left':'離開的是電子，因此最後留下哪一種淨電荷？','concept-correct':'實驗與判斷都完成了！'};
   function saveProgress(){try{localStorage.setItem(saveKey,JSON.stringify(completed));}catch(_){$('feedback').textContent+='（此瀏覽器無法儲存，進度僅保留本次。）';}}
-  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('notebook-button').textContent=`🎒 Lv. ${xp>=100?2:1} · ${xp}/100`;$('inventory').replaceChildren();['研究員：藍綠髮、粉色上衣、實驗探險裝','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
+  function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('notebook-button').textContent=`🎒 Lv. ${xp>=100?2:1} · ${xp}/100`;$('inventory').replaceChildren();['研究員：March','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
   function announceReward(mission){const toast=$('reward-toast');toast.textContent=mission===1?'發現完成！＋40 經驗。再試試接地順序。':'升到 Lv. 2！＋60 經驗，金屬球與琥珀工具箱已放到器材架。';toast.hidden=false;clearTimeout(rewardTimer);rewardTimer=setTimeout(()=>{toast.hidden=true;},4500);}
   function updateUI(){
     const lab=mode==='lab';$('lab-controls').hidden=true;$('bench-hud').hidden=!lab;$('walk-ui').hidden=lab;$('instrument-stats').hidden=true;
@@ -449,7 +468,7 @@
   function rodDiscGap(){let nearest=Infinity;for(let i=0;i<=30;i++){const p=rod.localToWorld(V(-.17+.72*i/30,0,0)),radial=Math.hypot(p.x+.5,p.z-.18);nearest=Math.min(nearest,Math.hypot(Math.max(0,radial-.37),Math.max(0,Math.abs(p.y-3.155)-.04))-.058);}return nearest;}
   window.labGame=Object.freeze({snapshot:()=>{
     scene.updateMatrixWorld(true);
-    return {mode,character:'研究員',position:avatar.position.toArray(),avatarVisible:avatar.visible,held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),bench:{...bench},benchTaskIndex,benchObserved:benchObserved.slice(),benchFlowVisible:benchParticles.filter(p=>p.visible).length,staticChargeMarkersVisible:posMarks.concat(negMarks).filter(p=>p.visible).length,rodPosition:rod.getWorldPosition(V()).toArray(),plateColor:plateMaterial.color.getHexString(),leafColor:foilMaterial.color.getHexString(),targetDistance,pathLength:path.length,groundWanted,
+    return {mode,character:modelStatus==='ready'?characterAsset.name:'研究員',characterSource:characterAsset?.url||null,characterAnimation:studentWalking?'walk':'rest',walkWeight:studentWalk?.getEffectiveWeight()??0,idleWeight:studentIdle?.getEffectiveWeight()??0,position:avatar.position.toArray(),avatarVisible:avatar.visible,held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),bench:{...bench},benchTaskIndex,benchObserved:benchObserved.slice(),benchFlowVisible:benchParticles.filter(p=>p.visible).length,staticChargeMarkersVisible:posMarks.concat(negMarks).filter(p=>p.visible).length,rodPosition:rod.getWorldPosition(V()).toArray(),plateColor:plateMaterial.color.getHexString(),leafColor:foilMaterial.color.getHexString(),targetDistance,pathLength:path.length,groundWanted,
       hand:handWorld(0).toArray(),visibleHand:(studentArms?studentArms[0].hand.getWorldPosition(V()):handWorld(0)).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),visibleGroundHand:(studentArms?studentArms[1].hand.getWorldPosition(V()):handWorld(1)).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),avatarModel:modelStatus,walkAnimationTime:studentWalk?studentWalk.time:null,
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
       studentArmPoints:studentArms?studentArms.map(a=>[a.upper,a.fore,a.hand].map(b=>b.getWorldPosition(V()).toArray())):null,

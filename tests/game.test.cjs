@@ -33,8 +33,14 @@ async function visibleLayout(page){return page.evaluate(()=>{
     const url=`http://127.0.0.1:${server.address().port}/lab_3d_bench_preview_0920_v6.html`,page=await browser.newPage({viewport:{width:1365,height:1000}});
     page.on('pageerror',error=>errors.push(error.message));await page.goto(url);await wait(page,()=>window.labGame?.snapshot().avatarModel==='ready');
     assert.equal((await snap(page)).mode,'walk');assert.equal((await snap(page)).avatarVisible,true);
+    assert.equal((await snap(page)).character,'March');
+    assert.match((await snap(page)).characterSource,/march-walk\.glb/);
+    assert.equal((await snap(page)).characterAnimation,'rest');
     await page.locator('#game').screenshot({path:path.join(out,'room.png')});
-    const start=(await snap(page)).position;await page.keyboard.down('d');await page.waitForTimeout(360);await page.keyboard.up('d');
+    const start=(await snap(page)).position;await page.keyboard.down('d');await page.waitForTimeout(360);
+    const walking=await snap(page);assert.equal(walking.characterAnimation,'walk');assert.ok(walking.walkWeight>.85,'March walking clip is active while moving');
+    await page.keyboard.up('d');await page.waitForTimeout(250);
+    assert.equal((await snap(page)).characterAnimation,'rest');assert.ok((await snap(page)).idleWeight>.85,'March returns to a standing pose');
     assert.ok(Math.hypot((await snap(page)).position[0]-start[0],(await snap(page)).position[2]-start[2])>.4);
     await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab'&&window.labGame.snapshot().rodPosition[0]<-2.7);
     let s=await snap(page);assert.equal(s.avatarVisible,false);assert.equal(s.staticChargeMarkersVisible,0);

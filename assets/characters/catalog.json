@@ -1,0 +1,30 @@
+{
+  "version": "2026-09-24",
+  "defaultPlayer": "march",
+  "characters": {
+    "march": {
+      "name": "March",
+      "url": "assets/characters/march-walk.glb?v=0924-01",
+      "sourceFile": "march走路.glb",
+      "sha256": "3ce8623d483e8aebb9af9cf8510a913926dcea0ed6a51b4e86eba2888980f1a5",
+      "bytes": 28543880,
+      "walkClip": "Walk_Female",
+      "height": 3.35,
+      "forwardYaw": 0,
+      "role": "player",
+      "provenance": "老師提供的完整走路模型，原始 GLB 位元組保留。"
+    },
+    "xiaozhen": {
+      "name": "曉臻老師",
+      "url": "assets/characters/xiaozhen-walk.glb?v=0924-01",
+      "sourceFile": "曉臻老師走路.glb",
+      "sha256": "65d89e73ea88ef51701afcf27274e04a96da9d62fc7e862f516b2099ce2f61b2",
+      "bytes": 27489184,
+      "walkClip": "Walk_Female",
+      "height": 3.55,
+      "forwardYaw": 0,
+      "role": "library",
+      "provenance": "老師提供的完整走路模型，先存入素材庫，尚未加入場景。"
+    }
+  }
+}
