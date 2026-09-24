@@ -204,7 +204,7 @@
   async function loadStudentModel(){
     if(typeof T.GLTFLoader!=='function'){modelStatus='fallback';return;}
     try{
-      const response=await fetch('assets/characters/catalog.json?v=0924-01');
+      const response=await fetch('assets/characters/catalog.json?v=0925-02');
       if(!response.ok)throw new Error('Character catalog unavailable');
       const catalog=await response.json();characterAsset=catalog.characters[catalog.defaultPlayer];
       if(!characterAsset)throw new Error('Player asset missing from catalog');

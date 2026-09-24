@@ -1,18 +1,19 @@
 {
-  "version": "2026-09-24",
+  "version": "2026-09-25",
   "defaultPlayer": "march",
   "characters": {
     "march": {
       "name": "March",
-      "url": "assets/characters/march-walk.glb?v=0924-01",
+      "url": "assets/characters/march-walk.glb?v=0925-02",
       "sourceFile": "march走路.glb",
-      "sha256": "3ce8623d483e8aebb9af9cf8510a913926dcea0ed6a51b4e86eba2888980f1a5",
-      "bytes": 28543880,
+      "sourceSha256": "3ce8623d483e8aebb9af9cf8510a913926dcea0ed6a51b4e86eba2888980f1a5",
+      "sha256": "0f6bd469c10b5fff14a3a0c7debb4cd48a6c05018d558fc6648122afcd975062",
+      "bytes": 4884904,
       "walkClip": "Walk_Female",
       "height": 3.35,
       "forwardYaw": 0,
       "role": "player",
-      "provenance": "老師提供的完整走路模型，原始 GLB 位元組保留。"
+      "provenance": "老師提供的走路模型；網頁版以 gltfpack 1.2 簡化網格並將貼圖轉成 WebP，原檔保留在老師桌面及 Git 歷史。"
     },
     "xiaozhen": {
       "name": "曉臻老師",
