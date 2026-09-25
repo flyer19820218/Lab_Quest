@@ -20,6 +20,15 @@ function serve(){return http.createServer((req,res)=>{
 });}
 async function distance(page,value){await page.locator('#bench-distance').evaluate((el,n)=>{el.value=n;el.dispatchEvent(new Event('input',{bubbles:true}));},value);}
 async function steer(page,side,duration=420){const b=await page.locator('#joystick').boundingBox(),x=b.x+b.width/2,y=b.y+b.height/2;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+side*b.width*.29,y,{steps:4});await page.waitForTimeout(duration);await page.mouse.up();}
+async function enterExperimentRoom(page,touch=false){
+  const point=await page.evaluate(()=>window.labGame.screenPoint('foyer-door'));
+  if(touch)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
+  await wait(page,()=>document.querySelector('#interact span').textContent==='進入實驗區');
+  if(touch)await page.locator('#interact').tap();else await page.locator('#interact').click();
+  await wait(page,()=>window.labGame.snapshot().area==='lab');
+  if(touch)await page.locator('#interact').tap();else await page.locator('#interact').click();
+  await wait(page,()=>window.labGame.snapshot().mode==='lab');
+}
 async function visibleLayout(page){return page.evaluate(()=>{
   const box=sel=>document.querySelector(sel).getBoundingClientRect(),game=box('#game'),scene=box('#world');
   return {ratio:scene.width/scene.height,scroll:document.documentElement.scrollWidth>innerWidth||document.documentElement.scrollHeight>innerHeight,
@@ -32,17 +41,27 @@ async function visibleLayout(page){return page.evaluate(()=>{
     browser=await chromium.launch({headless:true,...(process.platform==='darwin'?{executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'}:{})});
     const url=`http://127.0.0.1:${server.address().port}/lab_3d_bench_preview_0920_v6.html`,page=await browser.newPage({viewport:{width:1365,height:1000}});
     page.on('pageerror',error=>errors.push(error.message));await page.goto(url);await wait(page,()=>window.labGame?.snapshot().avatarModel==='ready');
-    assert.equal((await snap(page)).mode,'walk');assert.equal((await snap(page)).avatarVisible,true);
+    assert.equal((await snap(page)).mode,'walk');assert.equal((await snap(page)).area,'foyer');assert.equal((await snap(page)).avatarVisible,true);
+    assert.equal((await snap(page)).foyerVisible,true);assert.equal((await snap(page)).labVisible,false);
     assert.equal((await snap(page)).character,'March');
     assert.match((await snap(page)).characterSource,/march-walk\.glb/);
     assert.equal((await snap(page)).characterAnimation,'rest');
-    await page.locator('#game').screenshot({path:path.join(out,'room.png')});
+    await page.locator('#game').screenshot({path:path.join(out,'foyer-before.png')});
+    await wait(page,()=>window.labGame.snapshot().foyerHairCharge>.98);
+    await page.locator('#game').screenshot({path:path.join(out,'foyer-charged.png')});
     const start=(await snap(page)).position;await page.keyboard.down('d');await page.waitForTimeout(360);
     const walking=await snap(page);assert.equal(walking.characterAnimation,'walk');assert.ok(walking.walkWeight>.85,'March walking clip is active while moving');
     await page.keyboard.up('d');await page.waitForTimeout(250);
     assert.equal((await snap(page)).characterAnimation,'rest');assert.ok((await snap(page)).idleWeight>.85,'March returns to a standing pose');
     assert.ok(Math.hypot((await snap(page)).position[0]-start[0],(await snap(page)).position[2]-start[2])>.4);
-    await page.locator('#interact').click();await wait(page,()=>window.labGame.snapshot().mode==='lab'&&window.labGame.snapshot().rodPosition[0]<-2.7);
+    await page.locator('#interact').click();
+    await wait(page,()=>document.querySelector('#interact span').textContent==='觀察炸毛現象');
+    assert.equal((await snap(page)).observationOpen,false,'walking near the exhibit does not auto-start a task');
+    await page.locator('#interact').click();assert.equal((await snap(page)).observationOpen,true);
+    await page.locator('[data-foyer-guess="repel"]').click();assert.equal((await snap(page)).foyerGuess,'repel');
+    assert.equal((await snap(page)).observationOpen,false);
+    await enterExperimentRoom(page);
+    await wait(page,()=>window.labGame.snapshot().rodPosition[0]<-2.7);
     let s=await snap(page);assert.equal(s.avatarVisible,false);assert.equal(s.staticChargeMarkersVisible,0);
     assert.equal(await page.locator('#bench-hud').isVisible(),true);assert.equal(await page.locator('#lab-controls').isVisible(),false);
     assert.equal(await page.locator('#joystick').evaluate(el=>el.parentElement.id),'bench-lever');
@@ -73,12 +92,12 @@ async function visibleLayout(page){return page.evaluate(()=>{
     assert.equal((await snap(page)).rodPositiveBarsVisible,3,'a positive rod has three red plus signs');
     await distance(page,50);assert.equal((await snap(page)).bench.leafQ,0);await distance(page,100);s=await snap(page);assert.ok(s.bench.leafQ>0);assert.equal(s.benchObserved[4],true);
     await page.locator('#game').screenshot({path:path.join(out,'bench-opposite-rod.png')});
-    await page.locator('#bench-leave').click();s=await snap(page);assert.equal(s.mode,'walk');assert.equal(s.avatarVisible,true);assert.ok(s.position[2]>1.13,'avatar returns in front of the table collider');assert.equal(await page.locator('#joystick').evaluate(el=>el.parentElement.id),'walk-ui');
+    await page.locator('#bench-leave').click();s=await snap(page);assert.equal(s.mode,'walk');assert.equal(s.area,'lab');assert.equal(s.avatarVisible,true);assert.ok(s.position[2]>1.13,'avatar returns in front of the table collider');assert.equal(await page.locator('#joystick').evaluate(el=>el.parentElement.id),'walk-ui');
     await page.reload();await wait(page,()=>!!window.labGame);assert.deepEqual((await snap(page)).completed,[1,2]);
     const layouts=[];
     for(const viewport of [{width:1366,height:1024},{width:844,height:390},{width:667,height:375}]){
       const context=await browser.newContext({viewport,isMobile:true,hasTouch:true,deviceScaleFactor:1});const phone=await context.newPage();phone.on('pageerror',error=>errors.push(error.message));
-      await phone.goto(url);await wait(phone,()=>!!window.labGame);await phone.locator('#interact').tap();await wait(phone,()=>window.labGame.snapshot().mode==='lab');
+      await phone.goto(url);await wait(phone,()=>!!window.labGame);await enterExperimentRoom(phone,true);
       await wait(phone,()=>document.querySelector('#world').getBoundingClientRect().width/document.querySelector('#world').getBoundingClientRect().height>1.7);
       const layout=await visibleLayout(phone);assert.equal(layout.scroll,false,`${viewport.width}: no page scrolling`);assert.ok(Math.abs(layout.ratio-16/9)<.01);assert.equal(layout.controls,true,`${viewport.width}: all bench controls in viewport`);
       await phone.locator('#bench-distance').evaluate(el=>{el.value='60';el.dispatchEvent(new Event('input',{bubbles:true}));});assert.equal((await snap(phone)).bench.dist,60);

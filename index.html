@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#11261f"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>物理男孩：實驗室大冒險</title>
   <script>window.addEventListener('error',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+(e.message||e.target&&e.target.src&&e.target.src.split('/').pop()||'資源未載入')+'。請重新整理，或截圖告訴我。'},true);window.addEventListener('unhandledrejection',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+String(e.reason||'未知錯誤')+'。請截圖告訴我。'});setTimeout(function(){var box=document.getElementById('loading');if(box&&!box.hidden&&box.textContent==='正在打開實驗室…')box.textContent='3D 載入逾時。請重新整理；若仍無法開啟，請截圖告訴我。'},20000);</script>
-  <link rel="stylesheet" href="game.css?v=0920-08">
-  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/engine.js?v=0920-06"></script><script defer src="src/physical-boys-bench.js?v=0920-07"></script><script defer src="src/character-animation.js?v=0924-01"></script><script defer src="src/game.js?v=0925-02"></script>
+  <link rel="stylesheet" href="game.css?v=0926-friction-02">
+  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/engine.js?v=0920-06"></script><script defer src="src/physical-boys-bench.js?v=0920-07"></script><script defer src="src/friction.js?v=0926-friction-02"></script><script defer src="src/character-animation.js?v=0924-01"></script><script defer src="src/foyer-scene.js?v=0925-foyer-01"></script><script defer src="src/friction-station.js?v=0926-friction-02"></script><script defer src="src/game.js?v=0926-friction-02"></script>
 </head>
 <body>
 <main class="game-shell">
@@ -36,10 +36,29 @@
         </div>
       </div>
     </div>
-    <div class="game-toolbar"><span class="room-label"><i></i> 靜電研究室</span><span class="keys">W A S D／方向鍵走動 · E 操作 · Esc 離開</span><button id="notebook-button" type="button" aria-label="背包與獎勵">🎒 Lv. 1 · 0/100</button><button id="fullscreen" type="button" aria-label="全螢幕遊戲">⛶</button></div>
+    <div id="friction-hud" hidden aria-label="摩擦起電材料台">
+      <div class="friction-top"><strong>材料台 · 摩擦起電</strong><span id="friction-stage">先預測電子會去哪裡</span><button id="friction-leave" type="button">離開材料台</button></div>
+      <div class="friction-panel">
+        <div class="friction-pairs" role="group" aria-label="材料組"><button id="friction-plastic" type="button" aria-pressed="true">毛皮 × 塑膠尺</button><button id="friction-glass" type="button" aria-pressed="false">玻棒 × 絲絹</button></div>
+        <div id="friction-predict" class="friction-step"><span>先猜：摩擦後誰會得到電子？</span><div><button id="friction-predict-tool" type="button"></button><button id="friction-predict-cloth" type="button"></button></div></div>
+        <div id="friction-act" class="friction-step" hidden><div id="friction-rub-zone" role="group" tabindex="0" aria-label="左右拖曳，讓材料摩擦四次"><span id="friction-rub-text">在這裡左右拖曳材料</span><span class="friction-rub-glyph">↔</span></div><button id="friction-rub-key" type="button" aria-label="用按鈕摩擦一次">摩擦一次</button><span id="friction-count">0 / 4 次</span></div>
+        <div id="friction-explain" class="friction-step" hidden><span>觀察後判斷：誰獲得了電子？</span><div><button id="friction-answer-tool" type="button"></button><button id="friction-answer-cloth" type="button"></button></div></div>
+        <div id="friction-complete" class="friction-step" hidden><strong>推論完成 ✓</strong><span id="friction-complete-text">選另一組材料，再比較電子往哪裡移動。</span></div>
+        <div class="friction-bottom"><div id="friction-ledger" aria-live="polite"><span id="friction-tool-charge">工具：0</span><span id="friction-cloth-charge">布料：0</span><span>合計 0</span></div><span id="friction-feedback" role="status" aria-live="polite">兩件物品一開始都不帶淨電荷。</span><button id="friction-reset" type="button">重試</button></div>
+      </div>
+    </div>
+    <div class="game-toolbar"><span class="room-label"><i></i> 電學館 · 前廳</span><span class="keys">W A S D／方向鍵走動 · E 互動 · Esc 離開</span><button id="notebook-button" type="button" aria-label="背包與獎勵">🎒 Lv. 1 · 0/100</button><button id="fullscreen" type="button" aria-label="全螢幕遊戲">⛶</button></div>
     <div class="mission-card"><span id="mission-tag">第一天 · 自由探索</span><h2 id="mission-title">先到實驗桌看看吧。</h2><p id="instruction">拖左下搖桿、使用方向鍵，或點地板走過去。</p></div>
     <div id="instrument-stats" hidden><span id="net">淨電荷 0</span><span id="ground-status">接地斷開</span><span id="electron-status">遠：額外分離 0 個電子</span></div>
     <div id="walk-ui"><div id="joystick" role="group" aria-label="觸控移動搖桿"><span class="joystick-cross">＋</span><div id="stick"></div></div><button id="interact" type="button"><small>E</small><span>走到實驗桌</span></button></div>
+    <div id="foyer-observe" hidden role="dialog" aria-modal="true" aria-labelledby="foyer-observe-title">
+      <button id="foyer-close" type="button" aria-label="關閉觀察">✕</button>
+      <small>電學館 · 第一個謎</small><h2 id="foyer-observe-title">牠的毛，怎麼全都站起來了？</h2>
+      <p>先找兩個線索：前爪有沒有碰著金屬球？毛是往同一邊倒，還是彼此向外散開？</p>
+      <p class="foyer-question">你的猜想是什麼？先記下來，進實驗區再找證據。</p>
+      <div class="foyer-choices"><button type="button" data-foyer-guess="air">也許有風吹過</button><button type="button" data-foyer-guess="repel">也許毛髮彼此推開</button></div>
+      <button id="foyer-watch" type="button">再觀察一下</button>
+    </div>
     <p id="walk-feedback" role="status" aria-live="polite">這間實驗室是你的。走到桌邊，就能拿起器材。</p>
     <div id="reward-toast" hidden role="status" aria-live="polite"></div>
     <div class="scene-footer"><span id="mode-label">自由走動</span><span id="held-label">雙手空著</span></div>

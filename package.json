@@ -4,7 +4,7 @@
   "private": true,
   "description": "A walkable 3D physics lab with March, articulated experiments, and an independent science engine.",
   "scripts": {
-    "test": "node --test tests/engine.test.cjs",
-    "test:browser": "node tests/game.test.cjs"
+    "test": "node --test tests/engine.test.cjs tests/friction.test.cjs",
+    "test:browser": "node tests/game.test.cjs && node tests/friction-browser.test.cjs"
   }
 }

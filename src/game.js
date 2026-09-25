@@ -1,13 +1,15 @@
 (function () {
   'use strict';
-  const $ = id => document.getElementById(id), T = window.THREE, E = window.StaticElectricity, B = window.PhysicalBoysBench;
-  if (!T || !E || !B) { $('loading').textContent = '無法載入實驗室，請確認 vendor 與 src 資料夾完整。'; return; }
+  const $ = id => document.getElementById(id), T = window.THREE, E = window.StaticElectricity, B = window.PhysicalBoysBench, F = window.LabFoyer, R = window.LabFriction, S = window.LabFrictionStation;
+  if (!T || !E || !B || !F || !R || !S) { $('loading').textContent = '無法載入實驗室，請確認 vendor 與 src 資料夾完整。'; return; }
   const V = (x=0,y=0,z=0) => new T.Vector3(x,y,z);
   const saveKey = 'lab-quest-3d-v1';
   let completed=[];
   try { const v=JSON.parse(localStorage.getItem(saveKey)); if(Array.isArray(v)) completed=[...new Set(v.filter(n=>n===1||n===2))]; } catch (_) {}
-  let state=E.createState(1), bench=B.createState(), benchTaskIndex=0, mode='walk', held=false, action=null, targetDistance=1, groundWanted=false, turning=0;
+  let state=E.createState(1), bench=B.createState(), friction=R.createState(), benchTaskIndex=0, mode='walk', area='foyer', held=false, action=null, targetDistance=1, groundWanted=false, turning=0;
+  const frictionDone=new Set();
   let path=[], autoBench=false, lastTime=0, raf=0, isWalking=false;
+  let foyerGuess=null;
   const keys=new Set(), joystick={x:0,y:0,pointer:null};
   let rewardTimer=0;
   const touchGraphics=navigator.maxTouchPoints>0||matchMedia('(pointer: coarse)').matches;
@@ -85,6 +87,13 @@
   curve(wirePoints,.021,M.rubber);
   const switchArm=link(V(1.95,1.83,.3),V(2.19,2.02,.3),.023,M.trim);
   curve([V(2.18,1.83,.3),V(2.72,1.81,.3),V(2.95,.8,.22),V(3.1,.10,.2)],.024,M.rubber);
+  // Keep the original table, electroscope, room, and reward rack together.
+  // The new foyer is a separate scene layer, so no laboratory geometry moves.
+  const labWorld=new T.Group();labWorld.name='ExistingElectroscopeLab';scene.add(labWorld);
+  [...scene.children].forEach(child=>{if(child!==labWorld&&child!==sun&&child!==fill&&!child.isHemisphereLight)labWorld.add(child);});
+  const frictionStation=S.create(T);labWorld.add(frictionStation.root);
+  labWorld.visible=false;
+  const foyer=F.create(T);scene.add(foyer.root);
   // March: independent 3D meshes, modelled from the reference sheets (never flat sprites).
   const avatar=new T.Group();avatar.position.set(0,0,3.8);scene.add(avatar);
   const C={jacket:mat('#253e68'),seam:mat('#344f79'),shirt:mat('#44484f'),hair:mat('#202125'),hairLight:mat('#303238'),frame:mat('#1b2126'),pants:mat('#283443'),shoe:mat('#292d34'),sole:mat('#d5d3c9'),skin:mat('#eeb490'),white:mat('#f5f0e6'),iris:mat('#584131')};
@@ -236,6 +245,7 @@
   }
   // Instrument is parented to the hand only after the pickup animation reaches it.
   const rod=new T.Group(),rodGrip=new T.Object3D();rod.add(rodGrip);scene.add(rod);
+  rod.visible=false;
   const shaft=cyl(.058,.72,C.frame,.19,0,0,rod);shaft.rotation.z=Math.PI/2;
   const handle=cyl(.069,.22,M.rubber,-.07,0,0,rod);handle.rotation.z=Math.PI/2;
   const rodChargeMaterial=new T.MeshBasicMaterial({color:'#4dd2ff',toneMapped:false}),rodPositiveBars=[];
@@ -272,13 +282,43 @@
   function saveProgress(){try{localStorage.setItem(saveKey,JSON.stringify(completed));}catch(_){$('feedback').textContent+='（此瀏覽器無法儲存，進度僅保留本次。）';}}
   function progress(){const xp=completed.reduce((n,m)=>n+(m===1?40:60),0);$('level').textContent='Lv. '+(xp>=100?2:1);$('xp').textContent=xp+' / 100 經驗';$('xp-bar').value=xp;rewardRack.visible=xp>=100;$('notebook-button').textContent=`🎒 Lv. ${xp>=100?2:1} · ${xp}/100`;$('inventory').replaceChildren();['研究員：March','驗電器、負電棒、接地線',...(xp>=100?['新器材：一組等大的金屬球（器材架）','新裝備：琥珀工具箱']:[])].forEach(t=>{const li=document.createElement('li');li.textContent=t;$('inventory').appendChild(li);});$('record').textContent='已完成 '+completed.length+' / 2 個靜電發現。';}
   function announceReward(mission){const toast=$('reward-toast');toast.textContent=mission===1?'發現完成！＋40 經驗。再試試接地順序。':'升到 Lv. 2！＋60 經驗，金屬球與琥珀工具箱已放到器材架。';toast.hidden=false;clearTimeout(rewardTimer);rewardTimer=setTimeout(()=>{toast.hidden=true;},4500);}
+  const labExit=V(-5.32,0,2.92),frictionArrival=V(4.28,0,2.83);
+  function refreshWalkContext(){
+    if(mode!=='walk')return;
+    const p=avatar.position,button=$('interact').querySelector('span');
+    if(area==='foyer'){
+      const nearDoor=p.distanceTo(foyer.doorPoint)<1.55;
+      const nearExhibit=p.distanceTo(foyer.observationPoint)<2.20;
+      button.textContent=nearDoor?'進入實驗區':nearExhibit?'觀察炸毛現象':'走近金屬球';
+    }else button.textContent=p.distanceTo(labExit)<1.35?'回到電學館':p.distanceTo(frictionArrival)<1.75?'研究摩擦起電':Math.hypot(p.x,p.z)<4?'操作實驗桌':'走到實驗桌';
+  }
+  function chargeText(name,net){return `${name}：${net===0?'中性':net>0?'＋'+net+' 正電':'−'+Math.abs(net)+' 負電'}`;}
+  function updateFrictionUI(){
+    const pair=R.pairs[friction.pair],total=R.tally(friction),finished=friction.complete;
+    $('friction-plastic').setAttribute('aria-pressed',String(friction.pair==='plastic'));
+    $('friction-glass').setAttribute('aria-pressed',String(friction.pair==='glass'));
+    for(const phase of ['predict','answer']){$(`friction-${phase}-tool`).textContent=pair.tool;$(`friction-${phase}-cloth`).textContent=pair.cloth;}
+    $('friction-predict').hidden=friction.prediction!==null;
+    $('friction-act').hidden=friction.prediction===null||friction.strokes>=R.MAX_TRANSFER;
+    $('friction-explain').hidden=friction.strokes<R.MAX_TRANSFER||finished;
+    $('friction-complete').hidden=!finished;
+    $('friction-complete-text').textContent=frictionDone.size===2?'兩組材料的電子轉移方向不同；你可以離開材料台，繼續探索實驗室。':'換另一組材料，看看電子移動方向會不會反過來。';
+    $('friction-count').textContent=`${friction.strokes} / ${R.MAX_TRANSFER} 次`;
+    $('friction-tool-charge').textContent=chargeText(pair.tool,total.tool.net);
+    $('friction-cloth-charge').textContent=chargeText(pair.cloth,total.cloth.net);
+    $('friction-stage').textContent=finished?'推論完成 ✓':friction.strokes>=R.MAX_TRANSFER?'觀察結果，解釋電子去了哪裡':friction.prediction?'左右摩擦，追蹤藍色電子':'先預測電子會去哪裡';
+    const feedback={ready:'兩件物品一開始都不帶淨電荷。',predicted:'猜想已記下。現在左右拖曳材料，看看電子實際移動方向。','predict-first':'先選擇你的猜想。','electron-moved':'藍色電子移動了一個模型單位；紅色正電荷沒有移動。','observe-results':'四個藍色電子已轉移。兩件物品的總電荷仍是零。','rub-first':'再多摩擦幾次，觀察完整結果。','check-electron-direction':'再看一次藍色電子的方向：得到電子的物品會帶負電。','concept-correct':`${pair.donor==='tool'?pair.tool:pair.cloth}失去電子，${pair.receiver==='tool'?pair.tool:pair.cloth}得到電子；總電荷守恆。`};
+    $('friction-feedback').textContent=frictionDone.size===2&&finished?'兩組材料都驗證完成！下一站可探索衣物與氣球。':feedback[friction.feedback];
+  }
   function updateUI(){
-    const lab=mode==='lab';$('lab-controls').hidden=true;$('bench-hud').hidden=!lab;$('walk-ui').hidden=lab;$('instrument-stats').hidden=true;
+    const lab=mode==='lab',rubbing=mode==='friction';$('lab-controls').hidden=true;$('bench-hud').hidden=!lab;$('friction-hud').hidden=!rubbing;$('walk-ui').hidden=lab||rubbing;$('instrument-stats').hidden=true;
     document.querySelector('.game-shell').classList.toggle('is-lab',lab);
-    $('mode-label').textContent=lab?'實驗桌 · 直接操作':'自由走動';$('held-label').textContent=held?'手持負電棒':'雙手空著';
-    $('mission-tag').textContent=lab?'實驗 '+state.mission+' / 2 · 靜電研究':'第一天 · 自由探索';
-    $('mission-title').textContent=lab?(state.mission===1?'不碰它，金箔也會動？':'把電荷留下來。'):'先到實驗桌看看吧。';
-    $('instruction').textContent=lab?(held?(state.mission===1?'右手選「遠、中、近」，觀察金箔的變化。':'右手靠近 → 左手接地 → 抬左手 → 移棒。'):'點負電棒或按「拿起」，研究員會伸出右手。'):'拖左下搖桿、使用方向鍵，或點地板走過去。';
+    document.querySelector('.game-shell').classList.toggle('is-friction',rubbing);
+    document.querySelector('.room-label').innerHTML=area==='foyer'?'<i></i> 電學館 · 前廳':'<i></i> 靜電研究室';
+    $('mode-label').textContent=lab?'實驗桌 · 直接操作':rubbing?'材料台 · 摩擦起電':area==='foyer'?'電學館 · 自由探索':'自由走動';$('held-label').textContent=held?'手持負電棒':'雙手空著';
+    $('mission-tag').textContent=lab?'實驗 '+state.mission+' / 2 · 靜電研究':area==='foyer'?'第一幕 · 炸毛之謎':'第一天 · 自由探索';
+    $('mission-title').textContent=lab?(state.mission===1?'不碰它，金箔也會動？':'把電荷留下來。'):area==='foyer'?'牠的毛怎麼站起來了？':'桌邊的材料，有什麼祕密？';
+    $('instruction').textContent=lab?(held?(state.mission===1?'右手選「遠、中、近」，觀察金箔的變化。':'右手靠近 → 左手接地 → 抬左手 → 移棒。'):'點負電棒或按「拿起」，研究員會伸出右手。'):area==='foyer'?'自由走動；靠近金屬球後可主動觀察，也能直接走進右側的實驗區。':'拖左下搖桿、使用方向鍵，或點地板走過去。';
     $('pickup').disabled=held||!!action;
     for(const [id,d] of [['near',0],['mid',.5],['far',1]]){$(id).disabled=!held||!!action;$(id).setAttribute('aria-pressed',String(held&&targetDistance===d));}
     $('ground').disabled=state.mission!==2||!held||!!action;$('ground').setAttribute('aria-pressed',String(groundWanted));$('ground').textContent=groundWanted?'抬左手，斷地':'左手接地';
@@ -291,7 +331,7 @@
     $('question-text').textContent=state.mission===1?'負棒沒碰到圓盤，驗電器的總電荷是？':'斷地、移棒後，驗電器帶什麼電？';
     $('next').hidden=!lab||!state.completed||state.mission!==1;
     if(lab)$('feedback').textContent=state.inductionStage===1&&!state.isGrounded&&state.electroscopeNetCharge===0?'第一段：藍色電子從上方導體分流，左右鋁箔各增加 1 個，共 2 個。紅色正電荷固定不動。':messages[state.feedback]||messages.ready;
-    progress();if(lab)updateBenchUI();
+    progress();if(lab)updateBenchUI();else if(rubbing)updateFrictionUI();else refreshWalkContext();
   }
   function handWorld(i){avatar.updateMatrixWorld(true);return arms[i].hand.getWorldPosition(V());}
   function handToWorld(i,p){avatar.updateMatrixWorld(true);poseArm(i,avatar.worldToLocal(p.clone()));}
@@ -299,10 +339,52 @@
   function takeRod(){if(mode!=='lab'||held||action)return;handAction('伸手拿棒',RACK,650,()=>{arms[0].hand.add(rod);rod.position.set(0,0,0);rod.rotation.set(0,0,0);held=true;handAction('拿起負電棒',FAR,550,()=>{targetDistance=1;});});}
   function putAway(finish){groundWanted=false;dispatch({type:'SET_GROUNDED',value:false});targetDistance=1;dispatch({type:'MOVE_ROD',distance:1});if(!held){finish();return;}handAction('放回負電棒',RACK,650,()=>{scene.attach(rod);rod.position.copy(RACK);rod.rotation.set(0,0,0);held=false;finish();});}
   function resetMission(mission){if(action)return;putAway(()=>{state=E.createState(mission);targetDistance=1;rearrange();updateUI();});}
-  function enterBench(){mode='lab';avatar.visible=false;path=[];autoBench=false;isWalking=false;destination.visible=false;bench=B.createState();benchTaskIndex=0;benchFlow.length=0;benchParticles.forEach(p=>p.visible=false);benchFlowRemainder=0;benchGroundedNear=benchReleasedNear=false;joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';$('bench-lever').appendChild($('joystick'));$('joystick').setAttribute('aria-label','帶電棒搖桿。向右或向上靠近，向左或向下移遠。');scene.attach(rod);rod.rotation.set(0,0,0);syncRodPolarity();updateUI();}
+  function enterBench(){if(area!=='lab')return;mode='lab';avatar.visible=false;path=[];autoBench=false;isWalking=false;destination.visible=false;bench=B.createState();benchTaskIndex=0;benchFlow.length=0;benchParticles.forEach(p=>p.visible=false);benchFlowRemainder=0;benchGroundedNear=benchReleasedNear=false;joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';$('bench-lever').appendChild($('joystick'));$('joystick').setAttribute('aria-label','帶電棒搖桿。向右或向上靠近，向左或向下移遠。');scene.attach(rod);rod.rotation.set(0,0,0);syncRodPolarity();updateUI();}
   function leaveBench(){mode='walk';avatar.visible=true;avatar.position.set(.5,0,1.55);avatar.rotation.y=0;scene.attach(rod);rod.position.copy(RACK);rod.rotation.set(0,0,0);keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';$('walk-ui').prepend($('joystick'));$('joystick').setAttribute('aria-label','觸控移動搖桿');benchFlow.length=0;benchParticles.forEach(p=>p.visible=false);syncRodPolarity();updateUI();$('walk-feedback').textContent='可以繼續在房間裡走走，再回到桌邊實驗。';$('world').focus({preventScroll:true});}
+  function enterFriction(){
+    if(area!=='lab'||mode!=='walk')return;
+    mode='friction';avatar.visible=false;path=[];autoBench=false;isWalking=false;destination.visible=false;keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';
+    frictionStation.setState(friction);updateUI();
+  }
+  function leaveFriction(){
+    if(mode!=='friction')return;
+    mode='walk';avatar.visible=true;avatar.position.copy(frictionArrival);avatar.rotation.y=0;keys.clear();updateUI();
+    $('walk-feedback').textContent=frictionDone.size===2?'兩組材料都驗證了；還可以走向中央的驗電器，繼續探究。':'可以再回材料台，或去看中央的驗電器。';
+    $('world').focus({preventScroll:true});
+  }
+  function switchArea(next){
+    if(mode!=='walk'||next===area)return;
+    area=next;path=[];autoBench=false;destination.visible=false;isWalking=false;
+    keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';
+    foyer.root.visible=area==='foyer';labWorld.visible=area==='lab';rod.visible=area==='lab';
+    avatar.position.copy(area==='foyer'?V(4.42,0,-3.35):V(-3.70,0,2.76));
+    avatar.rotation.y=0;
+    $('walk-feedback').textContent=area==='foyer'?'可以繼續探索前廳；觀察與進實驗區都由你決定。':'已進入實驗區。右側材料台可以研究摩擦起電；中央實驗桌有驗電器。';
+    updateUI();$('world').focus({preventScroll:true});
+  }
+  function closeFoyerObservation(){
+    $('foyer-observe').hidden=true;keys.clear();
+    $('world').focus({preventScroll:true});
+  }
+  function interactWalk(){
+    if(mode!=='walk')return;
+    if(area==='lab'){
+      if(avatar.position.distanceTo(labExit)<1.35){switchArea('foyer');return;}
+      if(avatar.position.distanceTo(frictionArrival)<1.75){enterFriction();return;}
+      goBench();return;
+    }
+    if(avatar.position.distanceTo(foyer.doorPoint)<1.55){switchArea('lab');return;}
+    if(avatar.position.distanceTo(foyer.observationPoint)<2.20){
+      path=[];destination.visible=false;isWalking=false;keys.clear();joystick.x=joystick.y=0;
+      $('foyer-observe').hidden=false;$('foyer-close').focus();return;
+    }
+    path=findPath(foyer.observationPoint);autoBench=false;
+    if(path.length){destination.position.set(foyer.observationPoint.x,.075,foyer.observationPoint.z);destination.visible=true;$('walk-feedback').textContent='走到展品前，再按一次「觀察」。靠近不會自動開始任務。';}
+  }
   // Collision-aware grid navigation routes around the table, never through it.
-  const blocked=(x,z)=>Math.abs(x)>5.94||Math.abs(z)>5.15||(Math.abs(x)<3.13&&Math.abs(z)<1.13)||(x>3.18&&z<-3.72)||(x<-4.80&&z<-3.86);
+  const blocked=(x,z)=>Math.abs(x)>5.94||Math.abs(z)>5.15||(area==='lab'?
+    (Math.abs(x)<3.13&&Math.abs(z)<1.13)||(Math.abs(x-4.28)<1.30&&Math.abs(z-1.43)<.83)||(x>3.18&&z<-3.72)||(x<-4.80&&z<-3.86):
+    (Math.abs(x-.26)<1.00&&Math.abs(z+1.08)<.90)||(Math.abs(x+1.83)<.77&&Math.abs(z+1.08)<.77));
   const gridStep=.32,gridN=39,toGrid=n=>Math.round(n/gridStep)+19,key=(x,z)=>x+','+z;
   function findPath(goal){
     const start=[toGrid(avatar.position.x),toGrid(avatar.position.z)],end=[toGrid(goal.x),toGrid(goal.z)],open=[start],seen=new Set([key(...start)]),parents=new Map();let found=null;
@@ -311,7 +393,7 @@
     const route=[];while(key(...found)!==key(...start)){route.unshift(V((found[0]-19)*gridStep,0,(found[1]-19)*gridStep));found=parents.get(key(...found));if(!found)break;}
     if(!blocked(goal.x,goal.z))route.push(goal.clone());return route;
   }
-  function goBench(){if(mode!=='walk')return;const arrival=V(.5,0,1.55);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('walk-feedback').textContent='研究員正在走向實驗桌，準備直接操作器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}else if(!blocked(avatar.position.x,avatar.position.z))enterBench();}
+  function goBench(){if(mode!=='walk'||area!=='lab')return;const arrival=V(.5,0,1.55);path=findPath(arrival);autoBench=path.length>0;if(autoBench){$('walk-feedback').textContent='研究員正在走向實驗桌，準備直接操作器材。';$('interact').querySelector('span').textContent='前往實驗桌…';}else if(!blocked(avatar.position.x,avatar.position.z))enterBench();}
   const destination=mesh(new T.RingGeometry(.18,.23,32),new T.MeshBasicMaterial({color:'#fff0a5',side:T.DoubleSide,transparent:true,opacity:.8}));destination.rotation.x=-Math.PI/2;destination.position.y=.07;destination.visible=false;
   function moveCharacter(dx,dz,dt){const step=2.4*dt,n=Math.hypot(dx,dz);if(!n)return;dx=dx/n*step;dz=dz/n*step;const p=avatar.position;if(!blocked(p.x+dx,p.z))p.x+=dx;if(!blocked(p.x,p.z+dz))p.z+=dz;turning=Math.atan2(dx,dz);const diff=Math.atan2(Math.sin(turning-avatar.rotation.y),Math.cos(turning-avatar.rotation.y));avatar.rotation.y+=diff*Math.min(1,dt*14);}
   // Keep charge trajectories on metal; none ever cross the rod/disc air gap.
@@ -395,7 +477,7 @@
     if(mode==='lab'){rod.position.set(-2.75+1.20*bench.dist/100,3.155,.18);rod.rotation.set(0,0,0);}
     for(let i=benchFlow.length-1;i>=0;i--){const f=benchFlow[i],t=Math.max(0,(now-f.start)/f.duration);if(t>=1){f.particle.visible=false;benchFlow.splice(i,1);}else f.particle.position.copy(pathPoint(f.path,t));}
   }
-  const camWalk=V(9,9.5,12),camLab=V(3.2,4.8,8.4),look=new T.Vector3(),camAim=V(0,1,0);let camWidth=16;
+  const camWalk=V(9,9.5,12),camLab=V(3.2,4.8,8.4),camFriction=V(8.4,5.7,6.1),look=new T.Vector3(),camAim=V(0,1,0);let camWidth=16;
   function resize(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;renderer.setSize(b.width,b.height,false);updateCamera();}
   function updateCamera(){const b=$('world').getBoundingClientRect();if(b.width<2||b.height<2)return;const ratio=b.width/b.height;camera.left=-camWidth/2;camera.right=camWidth/2;camera.top=camWidth/ratio/2;camera.bottom=-camera.top;camera.updateProjectionMatrix();}
   if(typeof ResizeObserver!=='undefined')new ResizeObserver(resize).observe($('game'));
@@ -413,16 +495,55 @@
       legs.forEach((l,i)=>{const step=i===0?swing:-swing;l.hip.rotation.x=-step;l.knee.rotation.x=isWalking?.07+Math.max(0,step)*1.3:.05;l.ankle.rotation.x=-l.knee.rotation.x*.35;});
       torso.position.y=bob;torso.rotation.z=isWalking?swing*.035:Math.sin(now*.0018)*.008;pelvis.position.y=1.57+bob;head.rotation.x*=1-Math.min(1,dt*4);head.rotation.y*=1-Math.min(1,dt*4);
       poseArm(0,rest[0].clone().add(V(0,bob,-swing*.9)));poseArm(1,rest[1].clone().add(V(0,bob,swing*.9)));
-      if(!autoBench)$('interact').querySelector('span').textContent=Math.hypot(avatar.position.x,avatar.position.z)<4?'操作實驗桌':'走到實驗桌';
-    }else{
+      if(!autoBench)refreshWalkContext();
+    }else if(mode==='lab'){
       const axis=Math.abs(joystick.x)>=Math.abs(joystick.y)?joystick.x:-joystick.y;
       if(Math.abs(axis)>.08)setBench(B.setDistance(bench,bench.dist+axis*65*dt));
     }
-    const blend=1-Math.exp(-dt*5);camera.position.lerp(mode==='lab'?camLab:camWalk,blend);camAim.lerp(mode==='lab'?V(0,2.30,0):V(0,1,0),blend);camera.lookAt(camAim);camWidth+=((mode==='lab'?7.6:16)-camWidth)*blend;updateCamera();
+    const blend=1-Math.exp(-dt*5);camera.position.lerp(mode==='lab'?camLab:mode==='friction'?camFriction:camWalk,blend);camAim.lerp(mode==='lab'?V(0,2.30,0):mode==='friction'?V(4.28,1.57,1.43):V(0,1,0),blend);camera.lookAt(camAim);camWidth+=((mode==='lab'?7.6:mode==='friction'?5.7:16)-camWidth)*blend;updateCamera();
     if(mode==='walk')updateStudent(dt);
-    animateBench(now,dt);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
+    if(area==='foyer')foyer.update(dt);
+    animateBench(now,dt);frictionStation.update(now);renderer.render(scene,camera);if(!document.hidden)raf=requestAnimationFrame(frame);
   }
-  $('interact').addEventListener('click',goBench);$('pickup').addEventListener('click',takeRod);
+  $('interact').addEventListener('click',interactWalk);$('pickup').addEventListener('click',takeRod);
+  $('foyer-close').addEventListener('click',closeFoyerObservation);
+  $('foyer-watch').addEventListener('click',closeFoyerObservation);
+  document.querySelectorAll('[data-foyer-guess]').forEach(button=>button.addEventListener('click',()=>{
+    foyerGuess=button.dataset.foyerGuess;
+    closeFoyerObservation();
+    $('walk-feedback').textContent='猜想已記下。現在可繼續探索，或從右側大門走進實驗區找證據。';
+  }));
+  function rubOnce(){
+    if(mode!=='friction'||friction.prediction===null||friction.strokes>=R.MAX_TRANSFER)return;
+    friction=R.rub(friction);frictionStation.setState(friction);updateFrictionUI();
+  }
+  for(const id of ['plastic','glass'])$(`friction-${id}`).addEventListener('click',()=>{
+    if(mode!=='friction')return;
+    friction=R.selectPair(friction,id);frictionStation.setState(friction);updateFrictionUI();
+  });
+  for(const target of ['tool','cloth']){
+    $(`friction-predict-${target}`).addEventListener('click',()=>{if(mode==='friction'){friction=R.predict(friction,target);updateFrictionUI();}});
+    $(`friction-answer-${target}`).addEventListener('click',()=>{
+      if(mode!=='friction')return;
+      friction=R.answer(friction,target);if(friction.complete)frictionDone.add(friction.pair);updateFrictionUI();
+    });
+  }
+  $('friction-rub-key').addEventListener('click',rubOnce);
+  $('friction-rub-zone').addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();rubOnce();}});
+  let rubbingPointer=null,rubAnchor=0,rubDirection=0;
+  $('friction-rub-zone').addEventListener('pointerdown',e=>{
+    if(mode!=='friction'||friction.prediction===null||friction.strokes>=R.MAX_TRANSFER)return;
+    rubbingPointer=e.pointerId;rubAnchor=e.clientX;rubDirection=0;$('friction-rub-zone').setPointerCapture(e.pointerId);
+  });
+  $('friction-rub-zone').addEventListener('pointermove',e=>{
+    if(e.pointerId!==rubbingPointer)return;
+    const threshold=Math.max(30,$('friction-rub-zone').getBoundingClientRect().width*.24);
+    const delta=e.clientX-rubAnchor,direction=Math.sign(delta);
+    if(Math.abs(delta)>=threshold&&direction!==rubDirection){rubOnce();rubDirection=direction;rubAnchor=e.clientX;}
+  });
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])$('friction-rub-zone').addEventListener(event,e=>{if(e.pointerId===rubbingPointer)rubbingPointer=null;});
+  $('friction-reset').addEventListener('click',()=>{if(mode==='friction'){friction=R.createState(friction.pair);frictionStation.setState(friction);updateFrictionUI();}});
+  $('friction-leave').addEventListener('click',leaveFriction);
   function chooseDistance(distance){if(held&&!action){targetDistance=distance;updateUI();}}
   $('near').addEventListener('click',()=>chooseDistance(0));$('mid').addEventListener('click',()=>chooseDistance(.5));$('far').addEventListener('click',()=>chooseDistance(1));
   function toggleGround(){if(mode!=='lab'||state.mission!==2||!held||action)return;groundWanted=!groundWanted;if(!groundWanted)dispatch({type:'SET_GROUNDED',value:false});updateUI();}
@@ -448,10 +569,10 @@
       await document.documentElement.requestFullscreen();
     } catch (_) {
       document.documentElement.classList.add('immersive-fallback');
-      $(mode==='lab'?'feedback':'walk-feedback').textContent='已切換沉浸畫面；再次按全螢幕可退出。';
+      $(mode==='lab'?'feedback':mode==='friction'?'friction-feedback':'walk-feedback').textContent='已切換沉浸畫面；再次按全螢幕可退出。';
     }
   });
-  window.addEventListener('keydown',e=>{if($('notebook').open||/INPUT|TEXTAREA/.test(e.target.tagName))return;const k=e.key.toLowerCase();if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','e','escape'].includes(k)){e.preventDefault();if(mode==='lab'){if(['arrowright','arrowup'].includes(k))setBench(B.setDistance(bench,bench.dist+2));if(['arrowleft','arrowdown'].includes(k))setBench(B.setDistance(bench,bench.dist-2));if(k==='escape'){if(!$('bench-task-detail').hidden){$('bench-task-detail').hidden=true;$('bench-task-open').setAttribute('aria-expanded','false');}else leaveBench();}return;}keys.add(k);if(k==='e'&&!e.repeat)goBench();}});
+  window.addEventListener('keydown',e=>{if($('notebook').open||/INPUT|TEXTAREA/.test(e.target.tagName))return;const k=e.key.toLowerCase();if(!$('foyer-observe').hidden){if(k==='escape'){e.preventDefault();closeFoyerObservation();}return;}if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright','e','escape'].includes(k)){e.preventDefault();if(mode==='friction'){if(k==='escape')leaveFriction();return;}if(mode==='lab'){if(['arrowright','arrowup'].includes(k))setBench(B.setDistance(bench,bench.dist+2));if(['arrowleft','arrowdown'].includes(k))setBench(B.setDistance(bench,bench.dist-2));if(k==='escape'){if(!$('bench-task-detail').hidden){$('bench-task-detail').hidden=true;$('bench-task-open').setAttribute('aria-expanded','false');}else leaveBench();}return;}keys.add(k);if(k==='e'&&!e.repeat)interactWalk();}});
   window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
   function cancelInput(){keys.clear();joystick.x=joystick.y=0;joystick.pointer=null;$('stick').style.transform='';groundWanted=false;if(state.isGrounded)dispatch({type:'SET_GROUNDED',value:false});}
   window.addEventListener('blur',cancelInput);document.addEventListener('visibilitychange',()=>{cancelInput();if(document.hidden){if(raf)cancelAnimationFrame(raf);raf=0;}else if(!raf){lastTime=performance.now();raf=requestAnimationFrame(frame);}});
@@ -468,7 +589,7 @@
   function rodDiscGap(){let nearest=Infinity;for(let i=0;i<=30;i++){const p=rod.localToWorld(V(-.17+.72*i/30,0,0)),radial=Math.hypot(p.x+.5,p.z-.18);nearest=Math.min(nearest,Math.hypot(Math.max(0,radial-.37),Math.max(0,Math.abs(p.y-3.155)-.04))-.058);}return nearest;}
   window.labGame=Object.freeze({snapshot:()=>{
     scene.updateMatrixWorld(true);
-    return {mode,character:modelStatus==='ready'?characterAsset.name:'研究員',characterSource:characterAsset?.url||null,characterAnimation:studentWalking?'walk':'rest',walkWeight:studentWalk?.getEffectiveWeight()??0,idleWeight:studentIdle?.getEffectiveWeight()??0,position:avatar.position.toArray(),avatarVisible:avatar.visible,held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),bench:{...bench},benchTaskIndex,benchObserved:benchObserved.slice(),benchFlowVisible:benchParticles.filter(p=>p.visible).length,staticChargeMarkersVisible:posMarks.concat(negMarks).filter(p=>p.visible).length,rodPosition:rod.getWorldPosition(V()).toArray(),plateColor:plateMaterial.color.getHexString(),leafColor:foilMaterial.color.getHexString(),targetDistance,pathLength:path.length,groundWanted,
+    return {mode,area,foyerVisible:foyer.root.visible,labVisible:labWorld.visible,foyerHairCharge:foyer.getHairCharge(),observationOpen:!$('foyer-observe').hidden,foyerGuess,foyerDome:foyer.domeCenter.toArray(),foyerDoor:foyer.doorPoint.toArray(),character:modelStatus==='ready'?characterAsset.name:'研究員',characterSource:characterAsset?.url||null,characterAnimation:studentWalking?'walk':'rest',walkWeight:studentWalk?.getEffectiveWeight()??0,idleWeight:studentIdle?.getEffectiveWeight()??0,position:avatar.position.toArray(),avatarVisible:avatar.visible,held,action:action?.label||null,state:JSON.parse(JSON.stringify(state)),bench:{...bench},friction:{...friction},frictionTally:R.tally(friction),frictionDone:[...frictionDone],frictionVisible:labWorld.visible&&frictionStation.root.visible,frictionDisplayed:frictionStation.getDisplayedTransfers(),frictionFlight:frictionStation.getFlight(),benchTaskIndex,benchObserved:benchObserved.slice(),benchFlowVisible:benchParticles.filter(p=>p.visible).length,staticChargeMarkersVisible:posMarks.concat(negMarks).filter(p=>p.visible).length,rodPosition:rod.getWorldPosition(V()).toArray(),plateColor:plateMaterial.color.getHexString(),leafColor:foilMaterial.color.getHexString(),targetDistance,pathLength:path.length,groundWanted,
       hand:handWorld(0).toArray(),visibleHand:(studentArms?studentArms[0].hand.getWorldPosition(V()):handWorld(0)).toArray(),rodGrip:rodGrip.getWorldPosition(V()).toArray(),groundHand:handWorld(1).toArray(),visibleGroundHand:(studentArms?studentArms[1].hand.getWorldPosition(V()):handWorld(1)).toArray(),groundContact:PRESS.toArray(),rodDiscGap:rodDiscGap(),avatarModel:modelStatus,walkAnimationTime:studentWalk?studentWalk.time:null,
       armBones:arms.map(a=>({upper:a.shoulder.getWorldPosition(V()).distanceTo(a.elbow.getWorldPosition(V())),fore:a.elbow.getWorldPosition(V()).distanceTo(a.hand.getWorldPosition(V())),reachError:a.reachError})),
       studentArmPoints:studentArms?studentArms.map(a=>[a.upper,a.fore,a.hand].map(b=>b.getWorldPosition(V()).toArray())):null,
@@ -478,6 +599,6 @@
       chargeFlows:assignments.flatMap((p,i)=>p.moving&&performance.now()-p.start<950?[{index:i,from:p.oldZone,to:p.zone,slot:p.slot,origin:p.from.toArray(),position:negMarks[i].position.toArray()}]:[]),
       electronMarks:negMarks.map((g,i)=>({zone:assignments[i]?.zone,position:g.position.toArray(),visible:g.visible})),
       positiveMarks:posMarks.map(g=>g.position.toArray())};
-    },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
+    },screenPoint:which=>{const p=(which==='rod'?rod.getWorldPosition(V()):which==='pad'?pad.position.clone():which==='rack'?V(4.6,2,-4.7):which==='friction'?frictionArrival.clone():which==='foyer-door'?foyer.doorPoint.clone():which==='foyer-observation'?foyer.observationPoint.clone():V(0,0,3)).project(camera),r=$('world').getBoundingClientRect();return {x:r.x+(p.x+1)*r.width/2,y:r.y+(1-p.y)*r.height/2};}});
   scene.updateMatrixWorld(true);rearrange();assignments.forEach((p,i)=>negMarks[i].position.copy(chargePoint(p.zone,p.slot,0)));posMarks.concat(negMarks).forEach(p=>p.visible=false);updateUI();resize();$('loading').hidden=true;raf=requestAnimationFrame(frame);loadStudentModel();
 })();
