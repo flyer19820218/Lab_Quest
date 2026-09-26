@@ -1,40 +1,72 @@
 # 物理男孩：實驗室大冒險
 
-一座可以自由探索的電學館：前廳有范德格拉夫金屬球的炸毛現象，研究室有摩擦起電材料台，以及原有的驗電器、帶電棒與接地線。
-March 只在探索時走動；學生主動選擇觀察或實驗，不會因走近而自動觸發。進入器材操作時暫時隱藏人物，鏡頭留給科學現象。
+2026-09-26 第一人稱分區版，獨立 HTML 試玩版。這是獨立 Lab Quest 倉庫；原 Physical-Boys 教材只讀，沒有改動。
 
-## 開啟與遊玩
+## 本版玩法
 
-以本機 HTTP 伺服器開啟 `index.html`。請勿直接用 `file://` 開啟 3D 模型。三維函式庫與角色模型均在專案內，不需建置或 CDN。可在專案目錄執行 `python3 -m http.server 8765 --bind 127.0.0.1`，開啟 `http://127.0.0.1:8765/index.html`。
+24 × 14 遊戲單位的大實驗室，地板面積約原版 2.19 倍，有隔牆、走廊和七個實驗區。玩家先出現在范德格拉夫炸毛展示前，再自由探索摩擦、氣球與黑板、感應、接觸、萊頓瓶與原驗電器。路過不強制開任務；每張桌由玩家按互動鍵開始。
 
-- WASD／方向鍵、左下觸控搖桿，或點地板：走動。
-- 前廳靠近金屬球後再按互動鍵：觀察炸毛現象、提出猜想；右側門通往研究室。
-- 研究室右側材料台：選「毛皮 × 塑膠尺」或「玻棒 × 絲絹」，先預測，再在摩擦區左右拖曳四次，最後解釋誰得到電子。每次單向滑動算一次；也有「摩擦一次」按鈕。兩組電子流向相反，做錯可重試。
-- E 或右下「操作實驗桌」：人物走到桌邊，畫面切成直接操作器材的模式；此時人物隱藏。
-- 原本同一顆搖桿在實驗桌切換為「帶電棒搖桿」：往右／上推是靠近，往左／下推是移遠，鬆手停在當前距離；鍵盤方向鍵也可微調。
-- 可切換負電棒／正電棒、接地／解除接地、預設負電／中性／正電；畫面內有五個探究任務和即時讀值。
-- 「離開實驗桌」或 Esc：回到自由走動。
+- WASD／方向鍵或左下搖桿：移動。
+- 拖曳畫面：轉頭；Q／R 或右下兩個轉頭按鍵也可使用。不要求 Pointer Lock。
+- E／互動鍵：走近器材後主動操作。
+- 桌面採固定 2.5D 視角：原驗電器與摩擦桌是立體模型的正交特寫，旁桌是有深度提示的 Canvas 科學示意。
+- 驗電器使用同一顆搖桿連續調整棒距離；氣球維持遠／中／近三段。
+- 「返回實驗室」／Esc：回原站位與朝向，不瞬間傳送到另一張桌。
+- 導覽圖只導覽，不自動接任務；背包與原存檔仍在右上角。
+- 整個遊戲與控制在 16:9 橫式框內，不需要捲頁；直式有橫向使用提示。
 
-完成第一個感應探究可得 +40 經驗；完成接地、先斷地再移棒的探究可得 +60。等級與背包在遊戲右上角，完成時會顯示獎勵。達到 Lv. 2，器材架出現等大金屬球與琥珀工具箱。獎勵各領一次，進度存於本機。金屬球目前仍是陳列器材，尚無接觸起電關卡。
+March、曉臻老師與舊角色素材留在庫內，本版入口不下載角色、不顯示人物或手臂動畫。角色、服裝、物品與新獎勵系統延後，不刪除既有存檔。
 
-## 科學與人物
+## 內容與邊界
 
-`src/physical-boys-bench.js` 移植 `Physical-Boys/electronics_1.html` 驗電器探究的連續距離與電荷分布公式；原教材沒有改動。負棒不接觸圓盤；藍色粒子只表示移動的電子，正電荷以靜止紅色呈現，接地時顯示沿接地線的電子流。接地端與導線已恢復最初 3D v1 的位置和走線；按接地時開關閉合，解除時開關斷開。原本 3D 桌面與驗電器的幾何配置未改，帶電棒改由搖桿控制位置；負棒是藍色「−」，正棒是紅色「＋」。
-實驗桌、人物、器材是 WebGL 立體物件。`assets/characters/catalog.json` 收錄老師提供的 `march-walk.glb` 和 `xiaozhen-walk.glb`，對應原檔 `march走路.glb` 和 `曉臻老師走路.glb`。March 網頁版用 gltfpack 1.2 簡化網格至 83,552 個三角面，並將 2 張貼圖轉成 WebP；28,543,880 bytes 降至 4,884,904 bytes（約減少 83%）。原始 GLB 保留在老師桌面，上一版 Git 提交也可還原。曉臻老師模型未壓縮，先存入素材庫，尚未放進場景。兩個模型均包含 `Walk_Female` 走路片段。March 停下來時使用從完整步態產生的靜止站姿；模型載入失敗時會退回程序角色。進入實驗操作後不使用人物手臂動畫。舊的免費人物模型仍保留作為歷史素材，但遊戲不再載入。
+| 區 | 已做 |
+| --- | --- |
+| 01 范德格拉夫 | 既有炸毛現象與主動觀察；不是精密起電機模擬 |
+| 02 摩擦 | 毛皮→塑膠尺；玻棒→絲絹，四個示意電子，預測／摩擦／解釋 |
+| 03 氣球 | 明示乳膠＋羊毛衣物情境，中性黑板的束縛電荷極化；質性吸附 |
+| 04 感應 | 正負棒、接地／斷地／移棒順序，原教材 6→2／10 電子模型 |
+| 05 接觸 | 等大孤立金屬球，±8 與 0 接觸後各 ±4；分開保留 |
+| 06 萊頓瓶 | 全新 Blender 模型，完整／剖面／拆解；充放電尚待確認 |
+| 07 驗電器 | 原桌與器材尺寸逐字保留，原五題和連續分布公式 |
 
-電荷讀值是原教材的示意模型，非庫侖與精密電場模擬。畫面提供原教材的五個驗電器探究主題；其中前兩個發現與既有經驗值、等級系統連動。
+科學卡在 docs/concepts/。藍色表示電子／負電，紅色表示固定正電區。所有數值是教材示意單位，非庫侖或精密電場解。氣球實際吸附受材質／表面／濕度影響，本版材料選擇待老師試玩確認。
+
+舊 +40／+60 經驗與 localStorage 存檔保留；新完成流程要求操作與概念回答。滿 100 經驗仍解鎖既有等大金屬球與琥珀工具箱。這版未新增貨幣、服裝、班級排名或完整密室解謎。
+
+## 本機開啟
+
+以 HTTP 開 electricity_lab_first_person.html，不用 file://。Three.js、GLTFLoader 與 GLB 均為本機資產，不需 CDN 或 npm 建置。
+
+```sh
+python3 -m http.server 8766 --bind 127.0.0.1
+```
+
+開 http://127.0.0.1:8766/electricity_lab_first_person.html 。
+
+線上試玩：https://flyer19820218.github.io/Lab_Quest/electricity_lab_first_person.html 。原 index.html 保留 March 版本；這次依老師要求發布獨立頁面，資產由 GitHub Pages 提供，R2 未更新。
+
+## Blender 原檔與重建
+
+- assets/environment/electricity-gallery.blend：可編輯場景，材質、桌、隔牆、萊頓瓶分集合。
+- assets/environment/electricity-gallery.glb：約 3.95 MB，合併材質與網格瘦身的網頁版本。
+- assets/environment/leyden-jar.glb：約 128 KB，保留完整／剖面具名零件。
+- scripts/build-electricity-lab.py：以遊戲座標建模，轉成 Blender Z-up，匯出後 Three.js Y-up 不需旋轉補丁。
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python scripts/build-electricity-lab.py
+```
+
+此命令重建本專案生成的 .blend／GLB／預覽圖；未加瘦身工具時環境 GLB 約 7.46 MB。可在命令後加 `-- --gltfpack /工具路徑/gltfpack` 重現約 3.95 MB 版本；使用普通頂點格式，不要求額外 Draco／Meshopt 解碼器。不要對老師手動細修後的 .blend 任意執行重建。
+
+原驗電器幾何由 src/electroscope-station.js 保留，Blender 內的驗電器僅為配置參考，刻意不輸出到環境模型，避免雙重器材。
 
 ## 驗證
 
-- `node --test tests/physical-boys-bench.test.cjs`：連續距離、接地順序、反例、正電棒和五個任務的模型測試。
-- `node tests/game.test.cjs`（需要 Playwright、pngjs 與 Chrome）：March 載入及站姿／步態切換、走動、搖桿控制帶電棒、v1 接地線、正棒紅色加號、任務、觸控版面、獎勵存檔、電子流像素差和 JS 錯誤。
-- `node --test tests/friction.test.cjs`：兩組材料電子轉移方向、總電荷守恆、錯答重試與狀態重置。
-- `node tests/friction-browser.test.cjs`（需要 Playwright 與 Chrome）：主動觸發、實際滑動、桌面與橫式手機／iPad 版面、兩組材料與退出。
-- 測試圖片與報告：`artifacts/game-bench-v6/`（不進 Git），含桌面、iPad 與兩種橫式手機視窗。真實 iPhone／iPad 仍需覆測。
+- `npm test`：33 項科學／導航／原幾何比對。
+- `npm run test:browser`：需要 Playwright、pngjs 與本機 Chrome；走訪七區、主動觸發、WebGL 動畫像素差、科學流向／順序、舊存檔／經驗、16:9 桌面及 iPhone／iPad 尺寸。
+- artifacts/first-person-lab/：Blender 和實際遊戲截圖，不進 Git。
+- tests/game.test.cjs、friction-browser.test.cjs 假設歷史第三人稱入口，保留參考；現行脚本使用 first-person-browser.test.cjs。
 
-原始物理模型參照 `Physical-Boys/electronics_1.html` 的 `t6_updatePhysics`。獨立的早期 2D 向量概念稿 `prototype-svg-v1.html` 不是舊 3D 遊戲；它的測試仍由 `tests/browser.test.cjs` 執行。
-Three.js r160.1 與隨附的 GLTFLoader 使用 MIT 授權，見 `vendor/THREE-LICENSE.txt`。老師提供的原始 FBX 位於其 Downloads，倉庫只保留網頁用的壓縮 GLB。
+模擬測試不等於真機 Safari。本次發布供老師試玩，仍需老師確認 iPhone／iPad 的載入、多指搖桿／轉頭與桌面操作。完整狀態／模組／回復說明見 docs/FIRST_PERSON_HANDOFF.md。
 
-## 目前邊界
-
-這仍是電學館的可玩切片。已測 Chrome 桌面與橫式手機／iPad 模擬；真實 iPhone／iPad Safari 尚待老師覆測。March 網頁模型為 4.88 MB，首次開啟仍需下載與解碼。氣球吸中性黑板、萊頓瓶、服裝切換、其他房間和手把操作尚未實作。前廳金屬球目前是觀察現象，不是可操作的起電機實驗。
+Three.js r160.1 與 GLTFLoader 為 MIT，見 vendor/THREE-LICENSE.txt。Blender 新模型由本專案程序生成；老師提供的角色仍在 assets/characters/。

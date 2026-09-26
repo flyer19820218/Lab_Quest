@@ -1,0 +1,46 @@
+/* One literal 16:9 game surface; every overlay belongs to that surface. */
+html,body{height:100%;width:100%;overflow:hidden;background:#11261f}
+.game-shell,.game-shell.is-lab,.game-shell.is-friction{display:block;width:100vw;height:100dvh;max-width:none;padding:0;margin:0}
+.game-shell>header{display:none}.scene-layout{height:100%;width:100%}
+#game,.is-lab #game,html.immersive-fallback #game{position:fixed;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);width:min(100vw,calc(100dvh * 16 / 9));height:min(100dvh,calc(100vw * 9 / 16));aspect-ratio:16/9;border:0;border-radius:0;padding:0;max-height:none}
+#world,.is-lab #world,.is-friction #world,.game-shell:not(.is-lab) #world{position:absolute;inset:0;top:0;left:0;width:100%;height:100%;transform:none;pointer-events:auto}
+#game .game-toolbar,.is-lab #game .game-toolbar,.is-friction #game .game-toolbar{top:max(8px,env(safe-area-inset-top));left:12px;right:12px;width:auto;z-index:40}
+#game .game-toolbar button{font-size:13px;padding:4px 10px}
+.game-toolbar .keys{margin-left:auto;background:#183b37d9;border-radius:8px;padding:8px;color:#e5eddc}#game .mission-card{top:62px;left:16px;width:245px;padding:10px 13px;background:#f2ead5e8}
+#game .mission-card h2{font-size:19px}#game .mission-card p{font-size:13px}
+#game #walk-feedback{left:140px;bottom:33px;max-width:calc(100% - 390px);font-size:13px;pointer-events:none}
+#game .scene-footer{right:0}#game #joystick{left:22px;bottom:36px;transform:none;width:99px;height:99px}
+#game #interact{bottom:39px;right:20px;max-width:220px;min-width:165px;font-size:14px}
+#reticle{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);font-size:24px;color:#fff9da;text-shadow:0 1px 4px #162b28;pointer-events:none}
+#look-controls{position:absolute;right:22px;bottom:107px;display:flex;align-items:center;gap:6px;color:#e4eddd;font-size:12px}#look-controls span{background:#183b37d9;padding:7px;border-radius:6px}#look-controls button{font-size:24px;min-width:44px;padding:0 7px;background:#183b37c9;touch-action:none;user-select:none}
+#loading{z-index:100;text-align:center;padding:35px}#loading button{display:block;margin:18px auto}
+.is-experiment #game .mission-card,.is-experiment #walk-feedback,.is-experiment #reticle,.is-experiment #look-controls,.is-experiment .scene-footer,.is-experiment .game-toolbar .keys,.is-experiment .game-toolbar .room-label,.is-experiment #map-button{display:none!important}
+.is-experiment #game .game-toolbar{left:auto;right:8px;z-index:40}
+.is-lab .bench-head{left:12px;right:220px;top:8px;flex-wrap:wrap;gap:5px}#bench-task-summary{display:none}#bench-readout{font-size:12px;white-space:normal;margin:0}
+.bench-controls{top:auto;left:0;right:0;bottom:0;width:100%;height:150px;min-height:0;border-radius:0;display:grid;grid-template-columns:210px minmax(0,1fr);padding:7px;gap:7px}
+.bench-buttons{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,44px);gap:2px}.bench-buttons button{font-size:12px;padding:2px;min-height:44px}
+.is-lab .bench-lever{position:relative;flex:auto;padding:8px}.is-lab .bench-lever label{font-size:13px;max-width:100px}.is-lab .bench-lever small{font-size:11px}
+.is-lab #game #joystick{left:auto;right:8px;top:50%;bottom:auto;transform:translateY(-50%) scale(.8)}
+#bench-task-detail{top:55px;bottom:155px;right:12px;left:12px;width:auto;max-width:750px;padding:12px}
+#scope-question{position:absolute;bottom:155px;left:12px;right:12px;z-index:25;display:flex;justify-content:center;align-items:center;gap:6px;background:#183b37ed;border-radius:10px;padding:6px;font-size:14px}#scope-question button{min-height:44px;padding:4px 12px}
+.friction-top{left:12px;top:8px;right:220px;flex-wrap:wrap;gap:5px}.friction-top span{display:none}.friction-top button{font-size:12px}
+.friction-panel{height:150px;grid-template-columns:23% minmax(0,1fr) 27%;padding:6px;gap:5px}.friction-panel button{font-size:12px;padding:4px}.friction-step{font-size:13px;padding:6px}.friction-bottom{gap:4px}#friction-feedback{font-size:12px}#friction-ledger{font-size:12px}
+#inquiry-hud{position:absolute;inset:0;z-index:20;pointer-events:none}.inquiry-head{position:absolute;top:8px;left:12px;right:210px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:14px}.inquiry-head strong{color:#ffe08b;background:#173831e9;border-radius:8px;padding:10px}.inquiry-head button{pointer-events:auto;font-size:13px;padding:6px 10px}
+#inquiry-status{padding:7px;background:#183b37e8;border-radius:8px;font-size:13px}#inquiry-canvas{position:absolute;left:10px;right:10px;top:66px;bottom:156px;width:calc(100% - 20px);height:calc(100% - 222px)}
+#inquiry-panel{position:absolute;bottom:0;left:0;right:0;height:150px;padding:10px 16px;background:#142e2ded;border-top:1px solid #7fafa0;display:grid;grid-template-columns:1fr 1.6fr;grid-template-rows:1fr auto;gap:6px 18px;pointer-events:auto}
+#inquiry-prompt{margin:0;align-self:center;font-size:17px;color:#fce3a2;line-height:1.5}#inquiry-actions{display:flex;flex-wrap:wrap;align-content:center;gap:6px}#inquiry-actions button{font-size:14px;min-height:44px;padding:5px 12px}#inquiry-actions button[aria-pressed=true]{background:#f4cf7b;color:#16362c}#inquiry-feedback{grid-column:1/-1;margin:0;font-size:14px;line-height:1.4;color:#b9ded4}
+#lab-map{width:min(780px,90vw);max-height:90dvh;overflow:auto}#map-close{float:right}#map-canvas{width:100%;height:auto;display:block}#map-list{display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:15px}#lab-map p{font-size:13px;color:#c2d5c5}
+#reward-toast{left:50%;top:65px;max-width:80%;font-size:14px}
+@media(max-height:550px){
+  #game .game-toolbar button{font-size:11px;padding:2px 7px}.game-toolbar .keys{display:none}#game .room-label{font-size:12px;padding:7px}
+  #game .mission-card{top:55px;width:185px;padding:7px 9px}#game .mission-card h2{font-size:15px}#game .mission-card p{font-size:11px}
+  #game #joystick{transform:scale(.75);transform-origin:bottom left;left:12px;bottom:31px}#game #interact{right:12px;bottom:31px;min-width:0;font-size:12px;padding:6px 9px}#look-controls{right:12px;bottom:85px;font-size:10px}
+  #game #walk-feedback{left:96px;bottom:30px;max-width:calc(100% - 290px);font-size:11px;padding:4px 6px}
+  .bench-head{right:185px!important}.bench-head button{font-size:11px;padding:3px 7px}#bench-readout{font-size:10px;padding:4px}
+  .bench-controls{height:142px;grid-template-columns:170px minmax(0,1fr);padding:4px}.bench-buttons button{font-size:10px}.is-lab .bench-lever label{font-size:11px;max-width:86px}.is-lab .bench-lever small{font-size:10px}.is-lab #game #joystick{transform:translateY(-50%) scale(.68);transform-origin:center}
+  #scope-question{bottom:145px;padding:3px;font-size:11px}#scope-question button{font-size:11px;padding:2px 7px}#bench-task-detail{top:54px;bottom:145px;padding:8px}#bench-task-detail h2{font-size:17px}#bench-task-detail h3{font-size:13px}#bench-task-detail p{font-size:12px}
+  .friction-top{right:175px;font-size:11px}.friction-panel{height:142px}.friction-panel button,.friction-step{font-size:11px}#friction-act{grid-template-columns:minmax(0,1fr) 85px}#friction-rub-zone{min-height:0}#friction-feedback,#friction-ledger{font-size:10px}
+  .inquiry-head{right:170px;font-size:12px;gap:5px}.inquiry-head strong{padding:7px}.inquiry-head button,#inquiry-status{font-size:11px}
+  #inquiry-panel{height:142px;padding:6px 9px;gap:4px 9px;grid-template-columns:1fr 1.65fr}#inquiry-prompt{font-size:12px}#inquiry-actions{gap:4px}#inquiry-actions button{font-size:11px;padding:3px 7px}#inquiry-feedback{font-size:11px}#inquiry-canvas{top:57px;bottom:145px;height:calc(100% - 202px)}
+}
+@media(orientation:portrait){.portrait-note{z-index:1000}}

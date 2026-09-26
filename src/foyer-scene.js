@@ -3,7 +3,7 @@
 
   // The foyer is intentionally a visual observation, not a charge simulation.
   // No polarity, electron path, or answer is inferred from this animation.
-  function create(THREE) {
+  function create(THREE, options={}) {
     const root = new THREE.Group();
     root.name = 'ElectricityFoyer';
     const material = (color, roughness=.74, metalness=0) => new THREE.MeshStandardMaterial({color, roughness, metalness});
@@ -41,6 +41,7 @@
 
     // Warm, open-front museum room. The right-hand illuminated doorway is the
     // voluntary route to the existing experiment bench; the room is not a quest gate.
+    if(!options.exhibitOnly){
     box(13,.20,11.8,palette.wood,0,-.18,0);
     for(let i=0;i<22;i++)box(.035,.012,11.7,palette.cream,-6.3+i*.6,-.065,0);
     box(13,5,.20,palette.wall,0,2.43,-5.75);
@@ -79,6 +80,7 @@
       sphere(.20,.22,.18,palette.tealLight,x,1.22,-3.82);
     }
 
+    }
     // Opaque metal collecting dome, insulating column, and stable base.
     const domeCenter=new THREE.Vector3(-1.83,2.42,-1.08);
     cylinder(.66,.72,.13,palette.brass,-1.83,.16,-1.08);

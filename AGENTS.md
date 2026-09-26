@@ -4,6 +4,8 @@
 
 ## 目前確定的方向
 
+- **2026-09-26 最新方向優先：第一人稱探索，不顯示／下載 March 或手臂動畫。** 24 × 14 的 Blender 建模實驗室，七區自由探索；靠近後主動互動，再進固定 2.5D 桌面。March 等角色素材留庫、不刪除；角色、服裝與新獎勵仍延後。
+
 - 物理館電學實驗室是自由探索遊戲。March 暫作可走動角色；角色造型、服裝、物品與新獎勵系統延後。
 - 玩家走近器材時不得自動開任務或強制對話；須由玩家主動選擇互動。故事可有線索與密室感，但操作結果必須符合科學規則。
 - 規劃中的內容依序涵蓋范德格拉夫靜電球、萊頓瓶、摩擦起電、感應起電、接觸起電，最後以驗電器整合驗證。此順序是故事鋪陳，不代表鎖住其他展品或禁止自由探索。
@@ -21,6 +23,7 @@
 ## 工作路徑
 
 - 新增或大改場景：讀 docs/SCENE_PRODUCTION_SOP.md，使用 docs/templates/SCENE_CARD.md；場景故事見 docs/ELECTRICITY_HALL_STORY.md。
-- 現有遊戲入口在 index.html；3D 與輸入在 src/game.js；驗電器規則在 src/physical-boys-bench.js；早期離散引擎在 src/engine.js。不要把兩套規則混用而沒有測試。
+- 第一人稱入口在 electricity_lab_first_person.html；原 index.html 保留 March 版。第一人稱整合在 src/game-fp.js、鏡頭／輸入在 src/first-person.js、站點／碰撞在 src/lab-layout.js。Blender 源檔 assets/environment/electricity-gallery.blend 與 scripts/build-electricity-lab.py。src/game.js 為舊第三人稱實作，留作數值／幾何比對，仍由原 index.html 使用，不是第一人稱入口。
+- 驗電器規則在 src/physical-boys-bench.js，原幾何抽出在 src/electroscope-station.js；摩擦引擎 src/friction.js 不變；感應／接觸／氣球使用 src/inquiry-engine.js 與科學卡 docs/concepts/ELECTRICITY_SIDE_TABLES_SPEC.md。萊頓瓶只做結構，充放電仍待確認。不要把早期 src/engine.js 與現行驗電器公式混用。
 - 依修改範圍執行單元測試：npm test、node --test tests/physical-boys-bench.test.cjs。改動 3D、觸控或 UI 時再跑 npm run test:browser，並實測 iPhone／iPad Safari；桌面模擬不能代替真機驗收。
 - 每次交付清楚區分「已在程式中完成」、「只有規劃」及「等待老師或真機確認」。

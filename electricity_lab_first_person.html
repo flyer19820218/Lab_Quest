@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11261f"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>物理男孩：實驗室大冒險</title>
+  <script>window.addEventListener('error',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+(e.message||e.target&&e.target.src&&e.target.src.split('/').pop()||'資源未載入')+'。請重新整理，或截圖告訴我。'},true);window.addEventListener('unhandledrejection',function(e){var box=document.getElementById('loading');if(box&&!box.hidden)box.textContent='載入失敗：'+String(e.reason||'未知錯誤')+'。請截圖告訴我。'});setTimeout(function(){var box=document.getElementById('loading');if(box&&!box.hidden&&box.textContent==='正在打開實驗室…')box.textContent='3D 載入逾時。請重新整理；若仍無法開啟，請截圖告訴我。'},20000);</script>
+  <link rel="stylesheet" href="game.css?v=0926-friction-02">
+  <link rel="stylesheet" href="first-person.css?v=0926-fp-01">
+  <script defer src="vendor/three.min.js"></script><script defer src="vendor/GLTFLoader.js?v=0920-06"></script><script defer src="src/physical-boys-bench.js?v=0920-07"></script><script defer src="src/friction.js?v=0926-friction-02"></script><script defer src="src/foyer-scene.js?v=0926-fp-01"></script><script defer src="src/friction-station.js?v=0926-friction-02"></script><script defer src="src/lab-layout.js?v=0926-fp-01"></script><script defer src="src/first-person.js?v=0926-fp-01"></script><script defer src="src/electroscope-station.js?v=0926-fp-01"></script><script defer src="src/inquiry-engine.js?v=0926-fp-01"></script><script defer src="src/inquiry-view.js?v=0926-fp-01"></script><script defer src="src/game-fp.js?v=0926-fp-01"></script>
+</head>
+<body>
+<main class="game-shell">
+  <header><div class="identity"><span class="brand">⚛</span><div><small>物理男孩 · 研究員的實驗室生活</small><h1>實驗室大冒險</h1></div></div><div class="level"><strong id="level">Lv. 1</strong><span id="xp">0 / 100 經驗</span><progress id="xp-bar" max="100" value="0"></progress></div></header>
+  <div class="scene-layout">
+  <section id="game" aria-label="可走動的 3D 實驗室">
+    <canvas id="world" tabindex="0" aria-label="第一人稱 3D 實驗室。WASD 走動、拖曳畫面轉頭、Q／R 左右轉頭，E 主動操作器材。"></canvas>
+    <div id="reticle" aria-hidden="true">＋</div>
+    <div id="look-controls"><button id="look-left" type="button" aria-label="向左轉頭">↶</button><span>拖曳畫面轉頭</span><button id="look-right" type="button" aria-label="向右轉頭">↷</button></div>
+    <section id="inquiry-hud" hidden aria-label="分區實驗桌">
+      <div class="inquiry-head"><strong id="inquiry-title"></strong><span id="inquiry-status" role="status"></span><button id="inquiry-leave" type="button">返回實驗室</button></div>
+      <canvas id="inquiry-canvas" aria-label="2.5D 電學探究：藍色電子可以移動，紅色表示固定正電區" hidden></canvas>
+      <div id="inquiry-panel"><p id="inquiry-prompt"></p><div id="inquiry-actions"></div><p id="inquiry-feedback" role="status" aria-live="polite"></p></div>
+    </section>
+    <div id="scope-question" hidden><span id="scope-question-text"></span><button data-scope-answer="positive" type="button">正電</button><button data-scope-answer="neutral" type="button">中性</button><button data-scope-answer="negative" type="button">負電</button></div>
+    <div id="bench-hud" hidden>
+      <div class="bench-head">
+        <button id="bench-task-open" type="button" aria-expanded="false">探究任務 1 / 5</button>
+        <span id="bench-task-summary">慢慢靠近，觀察金箔。</span>
+        <span id="bench-readout" aria-live="polite">金屬盤 0 · 金箔 0 · 淨電荷 0</span>
+      </div>
+      <div id="bench-task-detail" hidden role="dialog" aria-label="物理男孩探究任務">
+        <button id="bench-task-close" type="button" aria-label="關閉任務說明">✕</button>
+        <h2 id="bench-task-title"></h2>
+        <section><h3>🤔 1. 先想一想</h3><p id="bench-think"></p></section>
+        <section><h3>👉 2. 動手實驗</h3><p id="bench-act"></p></section>
+        <section><h3>💡 3. 觀察驗證</h3><p id="bench-verify"></p></section>
+      </div>
+      <div class="bench-controls" aria-label="實驗桌操作">
+        <div class="bench-lever" id="bench-lever"><label for="bench-distance">帶電棒搖桿 <output id="bench-distance-label">遠 · 0%</output><small>右／上靠近 · 左／下移遠</small></label><div class="bench-range"><span>遠</span><input id="bench-distance" type="range" min="0" max="100" value="0" aria-label="帶電棒距離，從遠到近連續調整"><span>近</span></div></div>
+        <div class="bench-buttons">
+          <button id="bench-rod-negative" type="button" aria-pressed="true">負電棒</button><button id="bench-rod-positive" type="button" aria-pressed="false">正電棒</button><button id="bench-ground" type="button" aria-pressed="false">⚡ 接地</button>
+          <button id="bench-preset-negative" type="button">預設負電</button><button id="bench-preset-neutral" type="button">還原中性</button><button id="bench-preset-positive" type="button">預設正電</button>
+          <button id="bench-prev" type="button">⬅ 上一題</button><button id="bench-next" type="button">下一題 ➡</button><button id="bench-leave" type="button">離開實驗桌</button>
+        </div>
+      </div>
+    </div>
+    <div id="friction-hud" hidden aria-label="摩擦起電材料台">
+      <div class="friction-top"><strong>材料台 · 摩擦起電</strong><span id="friction-stage">先預測電子會去哪裡</span><button id="friction-leave" type="button">離開材料台</button></div>
+      <div class="friction-panel">
+        <div class="friction-pairs" role="group" aria-label="材料組"><button id="friction-plastic" type="button" aria-pressed="true">毛皮 × 塑膠尺</button><button id="friction-glass" type="button" aria-pressed="false">玻棒 × 絲絹</button></div>
+        <div id="friction-predict" class="friction-step"><span>先猜：摩擦後誰會得到電子？</span><div><button id="friction-predict-tool" type="button"></button><button id="friction-predict-cloth" type="button"></button></div></div>
+        <div id="friction-act" class="friction-step" hidden><div id="friction-rub-zone" role="group" tabindex="0" aria-label="左右拖曳，讓材料摩擦四次"><span id="friction-rub-text">在這裡左右拖曳材料</span><span class="friction-rub-glyph">↔</span></div><button id="friction-rub-key" type="button" aria-label="用按鈕摩擦一次">摩擦一次</button><span id="friction-count">0 / 4 次</span></div>
+        <div id="friction-explain" class="friction-step" hidden><span>觀察後判斷：誰獲得了電子？</span><div><button id="friction-answer-tool" type="button"></button><button id="friction-answer-cloth" type="button"></button></div></div>
+        <div id="friction-complete" class="friction-step" hidden><strong>推論完成 ✓</strong><span id="friction-complete-text">選另一組材料，再比較電子往哪裡移動。</span></div>
+        <div class="friction-bottom"><div id="friction-ledger" aria-live="polite"><span id="friction-tool-charge">工具：0</span><span id="friction-cloth-charge">布料：0</span><span>合計 0</span></div><span id="friction-feedback" role="status" aria-live="polite">兩件物品一開始都不帶淨電荷。</span><button id="friction-reset" type="button">重試</button></div>
+      </div>
+    </div>
+    <div class="game-toolbar"><span class="room-label"><i></i> 電學實驗室</span><span class="keys">WASD 移動 · Q／R 轉頭 · E 互動</span><button id="map-button" type="button">導覽圖</button><button id="notebook-button" type="button" aria-label="背包與獎勵">🎒 Lv. 1 · 0/100</button><button id="fullscreen" type="button" aria-label="全螢幕遊戲">⛶</button></div>
+    <div class="mission-card"><span id="mission-tag">第一天 · 自由探索</span><h2 id="mission-title">先到實驗桌看看吧。</h2><p id="instruction">拖左下搖桿、使用方向鍵，或點地板走過去。</p></div>
+    <div id="instrument-stats" hidden><span id="net">淨電荷 0</span><span id="ground-status">接地斷開</span><span id="electron-status">遠：額外分離 0 個電子</span></div>
+    <div id="walk-ui"><div id="joystick" role="group" aria-label="觸控移動搖桿"><span class="joystick-cross">＋</span><div id="stick"></div></div><button id="interact" type="button"><small>E</small><span>走到實驗桌</span></button></div>
+    <div id="foyer-observe" hidden role="dialog" aria-modal="true" aria-labelledby="foyer-observe-title">
+      <button id="foyer-close" type="button" aria-label="關閉觀察">✕</button>
+      <small>電學館 · 第一個謎</small><h2 id="foyer-observe-title">牠的毛，怎麼全都站起來了？</h2>
+      <p>先找兩個線索：前爪有沒有碰著金屬球？毛是往同一邊倒，還是彼此向外散開？</p>
+      <p class="foyer-question">你的猜想是什麼？先記下來，進實驗區再找證據。</p>
+      <div class="foyer-choices"><button type="button" data-foyer-guess="air">也許有風吹過</button><button type="button" data-foyer-guess="repel">也許毛髮彼此推開</button></div>
+      <button id="foyer-watch" type="button">再觀察一下</button>
+    </div>
+    <p id="walk-feedback" role="status" aria-live="polite">靠近只顯示線索；按互動鍵才會開始探究。</p>
+    <div id="reward-toast" hidden role="status" aria-live="polite"></div>
+    <div class="scene-footer"><span id="mode-label">第一人稱 · 自由探索</span><span id="held-label">先觀察，再動手</span></div>
+    <div id="loading">正在打開實驗室…</div>
+    <section class="experiment-controls" id="lab-controls" hidden aria-label="人物的實驗動作">
+    <div class="action-row"><button id="pickup" type="button">右手拿起負電棒</button><div class="distance-controls" role="group" aria-label="右手持棒距離"><button id="far" type="button" disabled aria-pressed="false">遠</button><button id="mid" type="button" disabled aria-pressed="false">中</button><button id="near" type="button" disabled aria-pressed="false">近</button></div><button id="ground" type="button" disabled aria-pressed="false">左手接地</button></div>
+    <p id="feedback" role="status" aria-live="polite">先拿起負電棒，控制人物的手靠近圓盤。</p>
+    <div class="under-controls"><span id="action-caption">先拿起桌上的負電棒，人物才會開始操作。</span><button id="reset" type="button">器材歸位</button><button id="leave" type="button">離開實驗桌</button></div>
+    <div class="legend"><span><i class="blue">−</i> 電子：只在導體與接地線上移動</span><span><i class="positive">+</i> 正電荷：固定在金屬上</span><span>模型電荷單位，非庫侖讀值</span></div>
+    <div id="question" hidden><p id="question-text">負棒沒碰到圓盤，驗電器的總電荷是？</p><div><button type="button" data-answer="positive">正電</button><button type="button" data-answer="negative">負電</button><button type="button" data-answer="neutral">零</button></div></div>
+    <button id="next" class="primary" type="button" hidden>接著挑戰：留下電荷 →</button>
+  </section>
+    <div class="portrait-note" role="status">請橫向使用</div>
+  </section>
+  </div>
+  <dialog id="notebook"><button id="close-notebook" type="button" aria-label="關閉">✕</button><small>研究員的背包</small><h2>每次發現，都會留下來。</h2><ul id="inventory"></ul><p id="record"></p><p class="note">保留原先的 +40／+60 經驗與本機存檔。本版先驗證第一人稱分區；新服裝與獎勵系統稍後再製作。</p></dialog>
+  <dialog id="lab-map"><button id="map-close" type="button" aria-label="關閉導覽圖">✕</button><h2>電學實驗室 · 自由探索</h2><canvas id="map-canvas" width="1000" height="500" aria-label="七個實驗區與目前位置"></canvas><div id="map-list"></div><p>金色點是你的位置。導覽圖不會傳送人物，也不會自動開啟任务。</p></dialog>
+</main>
+</body></html>

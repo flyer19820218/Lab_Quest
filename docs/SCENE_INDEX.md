@@ -4,6 +4,6 @@
 
 | 場景 ID | 名稱 | 狀態 | 目前可玩內容 | 下一個決定 |
 | --- | --- | --- | --- | --- |
-| physics-electricity-hall | [物理館・電學實驗室](ELECTRICITY_HALL_STORY.md) | 灰盒／待驗收 | March 自由探索、前廳炸毛觀察、[摩擦起電材料台](concepts/ELECTRICITY_FRICTION_SCENE_CARD.md)、原驗電器桌 | 老師用 iPhone／iPad 真機試玩第二站；第三站氣球與黑板先訂科學規格 |
+| physics-electricity-hall | [物理館・電學實驗室](ELECTRICITY_HALL_STORY.md) | 可試玩 | [第一人稱 24×14 七區版](concepts/FIRST_PERSON_ELECTRICITY_SCENE_CARD.md)：炸毛、摩擦、氣球、感應、接觸、萊頓瓶結構、原驗電器 | 老師確認動線、美術與 iPhone／iPad Safari 真機；萊頓瓶充放電另行確認；獨立頁 electricity_lab_first_person.html 試玩 |
 
 狀態詞：構想、待科學確認、灰盒、可試玩、已驗收。公開發布另記版本，不靠「可試玩」狀態推定。

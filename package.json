@@ -2,9 +2,9 @@
   "name": "physical-boys-lab-quest",
   "version": "0.2.0",
   "private": true,
-  "description": "A walkable 3D physics lab with March, articulated experiments, and an independent science engine.",
+  "description": "A Blender-built first-person electricity gallery with opt-in 2.5D inquiry benches.",
   "scripts": {
-    "test": "node --test tests/engine.test.cjs tests/friction.test.cjs",
-    "test:browser": "node tests/game.test.cjs && node tests/friction-browser.test.cjs"
+    "test": "node --test tests/engine.test.cjs tests/friction.test.cjs tests/physical-boys-bench.test.cjs tests/first-person.test.cjs",
+    "test:browser": "node tests/first-person-browser.test.cjs"
   }
 }
